@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
+// IMPORTANTE: Ahora usamos la configuración de tu archivo local
+import { auth, db } from './firebaseConfig';
 import { 
   getAuth, 
   signInAnonymously, 
@@ -39,46 +40,11 @@ import {
   Chrome 
 } from 'lucide-react';
 
-// --- CONFIGURACIÓN DE FIREBASE ---
-
-// NOTA PARA CUANDO LO COPIES A TU PC:
-// En tu ordenador, borra el bloque de abajo (desde 'const firebaseConfig' hasta 'const appId')
-// y sustitúyelo por esta única línea:
-// import { auth, db } from './firebaseConfig';
-
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-// ----------------------------------
-
 // --- Constantes ---
 const ADMIN_SECRET = "ADMIN123";
-// Usamos colecciones con el appId para que funcione en la preview
-// En tu PC puedes cambiarlas a simplemente 'users', 'logs', 'requests'
 const COLLECTION_USERS = 'users'; 
 const COLLECTION_LOGS = 'logs';
 const COLLECTION_REQUESTS = 'requests';
-
-// Función auxiliar para obtener la referencia a la colección correcta
-// En local esto sería simplemente collection(db, collectionName)
-const getCollectionRef = (collectionName) => {
-    // Si estamos en entorno de preview con appId definido
-    if (typeof __app_id !== 'undefined') {
-        return collection(db, 'artifacts', appId, 'public', 'data', collectionName);
-    }
-    // Si estamos en local (tu PC)
-    return collection(db, collectionName);
-}
-
-const getDocRef = (collectionName, docId) => {
-     if (typeof __app_id !== 'undefined') {
-        return doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId);
-    }
-    return doc(db, collectionName, docId);
-}
 
 // --- Componentes ---
 
@@ -265,7 +231,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
   // Cargar historial de logs
   useEffect(() => {
     if (!userDocId) return;
-    const q = query(getCollectionRef(COLLECTION_LOGS));
+    const q = query(collection(db, COLLECTION_LOGS));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -288,7 +254,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
   // Cargar mis solicitudes
   useEffect(() => {
     if (!userDocId) return;
-    const q = getCollectionRef(COLLECTION_REQUESTS);
+    const q = collection(db, COLLECTION_REQUESTS);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setMyRequests(reqs.filter(r => r.userId === userDocId));
@@ -300,7 +266,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     if (user.status !== 'active') return;
 
     try {
-      await addDoc(getCollectionRef(COLLECTION_LOGS), {
+      await addDoc(collection(db, COLLECTION_LOGS), {
         userId: userDocId,
         userName: user.name,
         type: type,
@@ -317,7 +283,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     if (!correctionDate || !correctionTime || !correctionReason) return;
 
     try {
-      await addDoc(getCollectionRef(COLLECTION_REQUESTS), {
+      await addDoc(collection(db, COLLECTION_REQUESTS), {
         userId: userDocId,
         userName: user.name,
         date: correctionDate,
@@ -532,21 +498,21 @@ const AdminDashboard = ({ user }) => {
   const [allLogs, setAllLogs] = useState([]);
 
   useEffect(() => {
-    const q = getCollectionRef(COLLECTION_USERS);
+    const q = collection(db, COLLECTION_USERS);
     return onSnapshot(q, (snap) => {
       setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
   }, []);
 
   useEffect(() => {
-    const q = getCollectionRef(COLLECTION_REQUESTS);
+    const q = collection(db, COLLECTION_REQUESTS);
     return onSnapshot(q, (snap) => {
       setPendingRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.status === 'pending'));
     });
   }, []);
 
   useEffect(() => {
-    const q = getCollectionRef(COLLECTION_LOGS);
+    const q = collection(db, COLLECTION_LOGS);
     return onSnapshot(q, (snap) => {
       const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setAllLogs(logs.sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
@@ -554,13 +520,13 @@ const AdminDashboard = ({ user }) => {
   }, []);
 
   const approveUser = async (userId) => {
-    await updateDoc(getDocRef(COLLECTION_USERS, userId), {
+    await updateDoc(doc(db, COLLECTION_USERS, userId), {
       status: 'active'
     });
   };
 
   const handleRequest = async (reqId, status) => {
-    await updateDoc(getDocRef(COLLECTION_REQUESTS, reqId), {
+    await updateDoc(doc(db, COLLECTION_REQUESTS, reqId), {
       status
     });
   };
@@ -783,7 +749,7 @@ export default function App() {
       return;
     }
 
-    const userProfileRef = getDocRef(COLLECTION_USERS, user.uid);
+    const userProfileRef = doc(db, COLLECTION_USERS, user.uid);
     
     const unsub = onSnapshot(userProfileRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -810,7 +776,7 @@ export default function App() {
     if (!currentUser) return; 
 
     try {
-      await setDoc(getDocRef(COLLECTION_USERS, currentUser.uid), {
+      await setDoc(doc(db, COLLECTION_USERS, currentUser.uid), {
          ...formData,
          email: currentUser.email || '', 
          createdAt: serverTimestamp()
