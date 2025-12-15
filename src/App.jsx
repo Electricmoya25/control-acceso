@@ -36,20 +36,49 @@ import {
   Briefcase,
   History,
   AlertCircle,
-  Chrome // Icono para Google (simulado con Chrome)
+  Chrome 
 } from 'lucide-react';
 
-// --- Configuración de Firebase ---
-// NOTA PARA EL USUARIO: Al copiar esto a tu PC, cambia este bloque según la guía.
-// --- Configuración de Firebase ---
-import { auth, db } from './firebaseConfig';
-const appId = 'club-acceso-app'; 
+// --- CONFIGURACIÓN DE FIREBASE ---
+
+// NOTA PARA CUANDO LO COPIES A TU PC:
+// En tu ordenador, borra el bloque de abajo (desde 'const firebaseConfig' hasta 'const appId')
+// y sustitúyelo por esta única línea:
+// import { auth, db } from './firebaseConfig';
+
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// ----------------------------------
 
 // --- Constantes ---
 const ADMIN_SECRET = "ADMIN123";
-const COLLECTION_USERS = 'users';
+// Usamos colecciones con el appId para que funcione en la preview
+// En tu PC puedes cambiarlas a simplemente 'users', 'logs', 'requests'
+const COLLECTION_USERS = 'users'; 
 const COLLECTION_LOGS = 'logs';
 const COLLECTION_REQUESTS = 'requests';
+
+// Función auxiliar para obtener la referencia a la colección correcta
+// En local esto sería simplemente collection(db, collectionName)
+const getCollectionRef = (collectionName) => {
+    // Si estamos en entorno de preview con appId definido
+    if (typeof __app_id !== 'undefined') {
+        return collection(db, 'artifacts', appId, 'public', 'data', collectionName);
+    }
+    // Si estamos en local (tu PC)
+    return collection(db, collectionName);
+}
+
+const getDocRef = (collectionName, docId) => {
+     if (typeof __app_id !== 'undefined') {
+        return doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId);
+    }
+    return doc(db, collectionName, docId);
+}
 
 // --- Componentes ---
 
@@ -75,7 +104,6 @@ const AuthScreen = ({ onLogin, currentUser }) => {
   const [adminCode, setAdminCode] = useState('');
   const [error, setError] = useState('');
 
-  // Actualizar nombre si viene de Google
   useEffect(() => {
     if (currentUser?.displayName) {
       setName(currentUser.displayName);
@@ -86,7 +114,6 @@ const AuthScreen = ({ onLogin, currentUser }) => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
-      // El useEffect en App detectará el cambio de usuario
     } catch (err) {
       console.error(err);
       setError("Error al iniciar sesión con Google. Intenta de nuevo.");
@@ -107,11 +134,9 @@ const AuthScreen = ({ onLogin, currentUser }) => {
       return;
     }
 
-    // Enviamos los datos para crear/actualizar el perfil
     onLogin({ name, role, status: role === 'admin' ? 'active' : 'pending' });
   };
 
-  // Si el usuario ya está autenticado (ej. por Google) pero le falta perfil (elegir rol)
   const isProfilePending = !!currentUser;
 
   return (
@@ -127,7 +152,6 @@ const AuthScreen = ({ onLogin, currentUser }) => {
             : 'Control de Acceso y Fichaje'}
         </p>
 
-        {/* Botón Google solo si NO estamos logueados aún */}
         {!isProfilePending && (
           <div className="mb-6">
              <button
@@ -154,7 +178,7 @@ const AuthScreen = ({ onLogin, currentUser }) => {
               onChange={(e) => setName(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               placeholder="Ej. Juan Pérez"
-              disabled={!!currentUser?.displayName} // Si viene de Google, bloqueamos edición simple
+              disabled={!!currentUser?.displayName}
             />
           </div>
 
@@ -230,7 +254,7 @@ const AuthScreen = ({ onLogin, currentUser }) => {
 
 // --- Panel de Empleado ---
 const EmployeeDashboard = ({ user, userDocId }) => {
-  const [status, setStatus] = useState('out'); // out, in, break
+  const [status, setStatus] = useState('out');
   const [logs, setLogs] = useState([]);
   const [showCorrection, setShowCorrection] = useState(false);
   const [correctionReason, setCorrectionReason] = useState('');
@@ -241,19 +265,30 @@ const EmployeeDashboard = ({ user, userDocId }) => {
   // Cargar historial de logs
   useEffect(() => {
     if (!userDocId) return;
-    // NOTA: Usamos collection simple para la app local si se desea
-    // Pero aquí mantenemos el path completo para la preview
-    const q = query(collection(db, COLLECTION_LOGS));
+    const q = query(getCollectionRef(COLLECTION_LOGS));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const myLogs = allLogsgit init
+      const myLogs = allLogs
+        .filter(log => log.userId === userDocId)
+        .sort((a, b) => b.timestamp?.seconds - a.timestamp?.seconds); 
       
+      setLogs(myLogs);
+
+      if (myLogs.length > 0) {
+        const lastLog = myLogs[0];
+        if (lastLog.type === 'in') setStatus('in');
+        else if (lastLog.type === 'break_start') setStatus('break');
+        else setStatus('out');
+      }
+    }, (error) => console.error("Error fetching logs:", error));
+    return () => unsubscribe();
+  }, [userDocId]);
 
   // Cargar mis solicitudes
   useEffect(() => {
     if (!userDocId) return;
-    const q = collection(db, COLLECTION_REQUESTS);
+    const q = getCollectionRef(COLLECTION_REQUESTS);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setMyRequests(reqs.filter(r => r.userId === userDocId));
@@ -265,7 +300,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     if (user.status !== 'active') return;
 
     try {
-      await addDoc(collection(db, COLLECTION_LOGS), {
+      await addDoc(getCollectionRef(COLLECTION_LOGS), {
         userId: userDocId,
         userName: user.name,
         type: type,
@@ -282,7 +317,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     if (!correctionDate || !correctionTime || !correctionReason) return;
 
     try {
-      await addDoc(collection(db, COLLECTION_REQUESTS), {
+      await addDoc(getCollectionRef(COLLECTION_REQUESTS), {
         userId: userDocId,
         userName: user.name,
         date: correctionDate,
@@ -303,7 +338,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
 
   const handleLogout = async () => {
     await signOut(auth);
-    window.location.reload(); // Recarga simple para limpiar estados
+    window.location.reload();
   };
 
   if (user.status === 'pending') {
@@ -347,8 +382,6 @@ const EmployeeDashboard = ({ user, userDocId }) => {
       </header>
 
       <main className="max-w-4xl mx-auto p-4 space-y-6">
-        
-        {/* Panel Principal de Control */}
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
             <Clock className="text-blue-600" /> Control de Acceso
@@ -443,7 +476,6 @@ const EmployeeDashboard = ({ user, userDocId }) => {
           </div>
         )}
 
-        {/* Historial */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow p-5">
             <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} /> Últimos Registros</h3>
@@ -494,30 +526,27 @@ const EmployeeDashboard = ({ user, userDocId }) => {
 
 // --- Panel de Administrador ---
 const AdminDashboard = ({ user }) => {
-  const [activeTab, setActiveTab] = useState('users'); // users, requests, logs
+  const [activeTab, setActiveTab] = useState('users'); 
   const [allUsers, setAllUsers] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [allLogs, setAllLogs] = useState([]);
 
-  // Fetch Users
   useEffect(() => {
-    const q = collection(db, COLLECTION_USERS);
+    const q = getCollectionRef(COLLECTION_USERS);
     return onSnapshot(q, (snap) => {
       setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
   }, []);
 
-  // Fetch Requests
   useEffect(() => {
-    const q = collection(db, COLLECTION_REQUESTS);
+    const q = getCollectionRef(COLLECTION_REQUESTS);
     return onSnapshot(q, (snap) => {
       setPendingRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.status === 'pending'));
     });
   }, []);
 
-  // Fetch Logs (Recent)
   useEffect(() => {
-    const q = collection(db, COLLECTION_LOGS);
+    const q = getCollectionRef(COLLECTION_LOGS);
     return onSnapshot(q, (snap) => {
       const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setAllLogs(logs.sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
@@ -525,13 +554,13 @@ const AdminDashboard = ({ user }) => {
   }, []);
 
   const approveUser = async (userId) => {
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', COLLECTION_USERS, userId), {
+    await updateDoc(getDocRef(COLLECTION_USERS, userId), {
       status: 'active'
     });
   };
 
   const handleRequest = async (reqId, status) => {
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', COLLECTION_REQUESTS, reqId), {
+    await updateDoc(getDocRef(COLLECTION_REQUESTS, reqId), {
       status
     });
   };
@@ -559,7 +588,6 @@ const AdminDashboard = ({ user }) => {
       </header>
 
       <div className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Sidebar Navigation */}
         <nav className="space-y-2">
           <button 
             onClick={() => setActiveTab('users')}
@@ -597,7 +625,6 @@ const AdminDashboard = ({ user }) => {
           </button>
         </nav>
 
-        {/* Content Area */}
         <main className="md:col-span-3">
           {activeTab === 'users' && (
             <div className="bg-white rounded-xl shadow-md overflow-hidden">
@@ -727,19 +754,18 @@ const AdminDashboard = ({ user }) => {
 
 // --- Componente Principal ---
 export default function App() {
-  const [user, setUser] = useState(null); // Auth User Object
-  const [userData, setUserData] = useState(null); // Firestore User Profile
+  const [user, setUser] = useState(null); 
+  const [userData, setUserData] = useState(null); 
   const [loading, setLoading] = useState(true);
 
-  // 1. Inicializar Auth
   useEffect(() => {
     const initAuth = async () => {
-      // Prioridad: Si hay token custom del entorno, úsalo (Preview)
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
       } else {
-        // En un entorno real (no preview), no logueamos anónimamente por defecto
-        // para permitir al usuario ver el login screen.
+        // En entorno de preview, auth anonima de fallback si no hay token
+        // En tu PC esto no se ejecutará si usas el import local
+        // await signInAnonymously(auth); 
       }
     };
     initAuth();
@@ -751,20 +777,18 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Escuchar cambios en el perfil del usuario (role, status, etc)
   useEffect(() => {
     if (!user) {
       setUserData(null);
       return;
     }
 
-    const userProfileRef = doc(db, 'artifacts', appId, 'public', 'data', COLLECTION_USERS, user.uid);
+    const userProfileRef = getDocRef(COLLECTION_USERS, user.uid);
     
     const unsub = onSnapshot(userProfileRef, (docSnap) => {
       if (docSnap.exists()) {
         setUserData({ ...docSnap.data(), uid: user.uid });
       } else {
-        // Usuario autenticado (ej. Google) pero sin perfil en DB
         setUserData(null); 
       }
       setLoading(false);
@@ -778,22 +802,17 @@ export default function App() {
 
   const handleRegisterOrLogin = async (formData) => {
     if (!user) {
-      // Si por alguna razón no hay user (caso raro aquí si se usa form manual sin auth previa)
-      // En un flujo real aquí se usaría createUserWithEmailAndPassword
-      // Para este demo, usaremos login anónimo si no hay user
+      // Intento de login anónimo si falla google auth en preview
       await signInAnonymously(auth);
-      // Esperamos a que onAuthStateChanged detecte el usuario...
     }
     
-    // Obtenemos el usuario actual (puede haberse acabado de crear anónimamente)
     const currentUser = auth.currentUser;
     if (!currentUser) return; 
 
     try {
-      // Usamos setDoc con merge para crear o actualizar
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', COLLECTION_USERS, currentUser.uid), {
+      await setDoc(getDocRef(COLLECTION_USERS, currentUser.uid), {
          ...formData,
-         email: currentUser.email || '', // Guardamos email si existe (Google)
+         email: currentUser.email || '', 
          createdAt: serverTimestamp()
       }, { merge: true });
     } catch (e) {
@@ -803,13 +822,10 @@ export default function App() {
 
   if (loading) return <Loading />;
 
-  // Si no tiene perfil de datos, mostramos login/registro
-  // Pasamos 'user' a AuthScreen para saber si ya se autenticó con Google pero falta rol
   if (!userData) {
     return <AuthScreen onLogin={handleRegisterOrLogin} currentUser={user} />;
   }
 
-  // Router simple basado en roles
   if (userData.role === 'admin') {
     return <AdminDashboard user={userData} />;
   }
