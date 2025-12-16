@@ -3,10 +3,10 @@ import React, { useState, useEffect, useRef } from 'react';
 // =============================================================================
 //  🔴 INSTRUCCIONES: EN TU PC, DESCOMENTA LAS SIGUIENTES 2 LÍNEAS:
 // =============================================================================
-import logoImg from './logo.png'; 
-import { auth, db } from './firebaseConfig';
+// import logoImg from './logo.png'; 
+// import { auth, db } from './firebaseConfig';
 
-/* --- BLOQUE TEMPORAL PARA EVITAR ERRORES EN ESTE CHAT (BÓRRALO EN TU PC) --- 
+/* --- BLOQUE TEMPORAL PARA EVITAR ERRORES EN ESTE CHAT (BÓRRALO EN TU PC) --- */
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
@@ -14,7 +14,7 @@ const logoImg = "https://via.placeholder.com/150";
 const appDummy = initializeApp({apiKey: "dummy", projectId: "dummy"}); 
 const auth = getAuth(appDummy);
 const db = getFirestore(appDummy);
--------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
 
 import { 
   onAuthStateChanged,
@@ -22,6 +22,7 @@ import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail, // Importado para resetear contraseña
   signOut
 } from 'firebase/auth';
 import { 
@@ -32,8 +33,9 @@ import {
   doc, 
   updateDoc, 
   setDoc,
-  getDoc, // Añadido getDoc
-  serverTimestamp
+  getDoc, 
+  serverTimestamp,
+  deleteDoc
 } from 'firebase/firestore';
 import { 
   Clock, 
@@ -53,19 +55,22 @@ import {
   Printer,
   FileBarChart,
   Lock,
-  Settings, // Nuevo icono
-  RefreshCcw, // Nuevo icono
-  Key // Nuevo icono
+  Settings, 
+  RefreshCcw, 
+  Key,
+  UserPlus, // Nuevo icono
+  Mail
 } from 'lucide-react';
 
 // --- Constantes ---
-const DEFAULT_ADMIN_CODE = "123456"; // Contraseña original
-const MASTER_EMAIL = "master@master.es"; // Usuario Maestro
+const DEFAULT_ADMIN_CODE = "123456"; 
+const MASTER_EMAIL = "master@master.es"; 
 
 const COLLECTION_USERS = 'users'; 
 const COLLECTION_LOGS = 'logs';
 const COLLECTION_REQUESTS = 'requests';
-const COLLECTION_SETTINGS = 'settings'; // Nueva colección para guardar config
+const COLLECTION_SETTINGS = 'settings'; 
+const COLLECTION_ADMIN_INVITES = 'admin_invites'; // Nueva colección para pre-altas
 
 // --- Componentes Auxiliares ---
 
@@ -101,6 +106,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [resetMessage, setResetMessage] = useState(''); // Estado para mensaje de reset
   
   const [name, setName] = useState(currentUser?.displayName || '');
   const [role, setRole] = useState('employee');
@@ -111,6 +117,23 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
       setName(currentUser.displayName);
     }
   }, [currentUser]);
+
+  // Función para resetear contraseña
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError("Por favor, escribe tu correo electrónico primero.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetMessage(`Se ha enviado un correo a ${email} para restablecer tu contraseña.`);
+      setError('');
+    } catch (err) {
+      console.error(err);
+      if (err.code === 'auth/user-not-found') setError("No existe ninguna cuenta con este correo.");
+      else setError("Error al enviar el correo. Verifica que el email sea válido.");
+    }
+  };
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
@@ -125,6 +148,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
   const handleEmailAuth = async (e) => {
     e.preventDefault();
     setError('');
+    setResetMessage('');
     if (!email || !password) {
       setError("Por favor completa todos los campos.");
       return;
@@ -153,37 +177,58 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
       return;
     }
 
-    if (role === 'admin') {
-      // Si es el usuario maestro, pase VIP
-      if (currentUser?.email === MASTER_EMAIL) {
-         // Maestro pasa sin verificar código
-      } else {
-        // Verificar código de admin contra la base de datos
-        try {
-          const settingsRef = doc(db, COLLECTION_SETTINGS, 'admin_config');
-          const settingsSnap = await getDoc(settingsRef);
-          
-          let currentAdminCode = DEFAULT_ADMIN_CODE;
-          if (settingsSnap.exists() && settingsSnap.data().code) {
-            currentAdminCode = settingsSnap.data().code;
-          }
+    // Verificar si el usuario está pre-autorizado como admin (Invitación)
+    let finalRole = role;
+    let finalStatus = role === 'admin' ? 'pending' : 'pending'; // Por defecto pendiente
 
-          if (adminCode !== currentAdminCode) {
-            setError('Código de administrador incorrecto.');
-            return;
+    // Si intenta ser admin manualmente
+    if (role === 'admin') {
+      if (currentUser?.email === MASTER_EMAIL) {
+         finalStatus = 'active'; // Master es siempre activo
+      } else {
+        // Verificar código
+        try {
+          // Primero chequeamos si está en la lista de invitados
+          const inviteRef = doc(db, COLLECTION_ADMIN_INVITES, currentUser.email);
+          const inviteSnap = await getDoc(inviteRef);
+
+          if (inviteSnap.exists()) {
+            // ¡Es un admin invitado! Pase directo.
+            finalStatus = 'active';
+          } else {
+            // No es invitado, verificar código manual
+            const settingsRef = doc(db, COLLECTION_SETTINGS, 'admin_config');
+            const settingsSnap = await getDoc(settingsRef);
+            let currentAdminCode = DEFAULT_ADMIN_CODE;
+            if (settingsSnap.exists() && settingsSnap.data().code) {
+              currentAdminCode = settingsSnap.data().code;
+            }
+
+            if (adminCode !== currentAdminCode) {
+              setError('Código de administrador incorrecto.');
+              return;
+            }
+            finalStatus = 'active'; // Si acertó el código, es activo
           }
         } catch (err) {
-          console.error("Error verificando código admin:", err);
-          // Si falla la lectura (ej. permisos o red), fallback al default si no existe config
-          if (adminCode !== DEFAULT_ADMIN_CODE) {
-             setError('Error de verificación. Intenta con el código por defecto o contacta soporte.');
+          console.error("Error verificando admin:", err);
+          // Fallback básico
+          if (adminCode === DEFAULT_ADMIN_CODE) {
+             finalStatus = 'active';
+          } else {
+             setError('Error de verificación.');
              return;
           }
         }
       }
     }
 
-    onCompleteProfile({ name, role, status: role === 'admin' ? 'active' : 'pending' });
+    // Aseguramos que se envía el nombre explícitamente
+    onCompleteProfile({ 
+      name: name, 
+      role: finalRole, 
+      status: finalRole === 'admin' ? finalStatus : 'pending' 
+    });
   };
 
   // Si NO hay usuario autenticado
@@ -205,13 +250,13 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
           <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
             <button 
               className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'login' ? 'bg-white text-gray-800 shadow' : 'text-gray-500'}`}
-              onClick={() => {setAuthMode('login'); setError('');}}
+              onClick={() => {setAuthMode('login'); setError(''); setResetMessage('');}}
             >
               Iniciar Sesión
             </button>
             <button 
               className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'register' ? 'bg-white text-gray-800 shadow' : 'text-gray-500'}`}
-              onClick={() => {setAuthMode('register'); setError('');}}
+              onClick={() => {setAuthMode('register'); setError(''); setResetMessage('');}}
             >
               Registrarse
             </button>
@@ -250,11 +295,29 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
+              {/* Botón Olvidé Contraseña */}
+              {authMode === 'login' && (
+                <div className="text-right mt-1">
+                  <button 
+                    type="button" 
+                    onClick={handleForgotPassword}
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+              )}
             </div>
 
             {error && (
               <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-center gap-2 border border-red-100">
                 <AlertCircle size={16} /> {error}
+              </div>
+            )}
+            
+            {resetMessage && (
+              <div className="p-3 bg-green-50 text-green-700 text-sm rounded-lg flex items-center gap-2 border border-green-100">
+                <CheckCircle size={16} /> {resetMessage}
               </div>
             )}
 
@@ -349,16 +412,21 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
           {role === 'admin' && (
             <div className="animate-in fade-in slide-in-from-top-2 duration-300">
               <label className="block text-sm font-medium text-purple-700 mb-1">
-                {currentUser?.email === MASTER_EMAIL ? 'Código de Administrador (Omitido para Master)' : 'Código de Administrador'}
+                {currentUser?.email === MASTER_EMAIL ? 'Pase Maestro (Automático)' : 'Código de Administrador'}
               </label>
               <input
                 type="password"
                 value={adminCode}
                 onChange={(e) => setAdminCode(e.target.value)}
                 className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none bg-purple-50"
-                placeholder={currentUser?.email === MASTER_EMAIL ? "Pase Maestro Activo" : "Ingresa el código secreto"}
+                placeholder={currentUser?.email === MASTER_EMAIL ? "Acceso Garantizado" : "Ingresa el código secreto"}
                 disabled={currentUser?.email === MASTER_EMAIL}
               />
+              {currentUser?.email !== MASTER_EMAIL && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Si no tienes el código, pide a otro administrador que te invite.
+                </p>
+              )}
             </div>
           )}
 
@@ -389,7 +457,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
   );
 };
 
-// --- Panel de Empleado (Sin cambios lógicos, solo visual) ---
+// --- Panel de Empleado ---
 const EmployeeDashboard = ({ user, userDocId }) => {
   const [status, setStatus] = useState('out');
   const [logs, setLogs] = useState([]);
@@ -583,10 +651,12 @@ const AdminDashboard = ({ user }) => {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [allLogs, setAllLogs] = useState([]);
   const [reportFilter, setReportFilter] = useState('week');
+  const [adminInvites, setAdminInvites] = useState([]); // Lista de invitados
   
-  // Estados para configuración de admin
+  // Estados para configuración
   const [newAdminCode, setNewAdminCode] = useState('');
   const [configMessage, setConfigMessage] = useState('');
+  const [newAdminEmail, setNewAdminEmail] = useState(''); // Para invitar
 
   useEffect(() => {
     const q = collection(db, COLLECTION_USERS);
@@ -606,12 +676,30 @@ const AdminDashboard = ({ user }) => {
     });
   }, []);
 
+  // Cargar lista de admins invitados
+  useEffect(() => {
+    const q = collection(db, COLLECTION_ADMIN_INVITES);
+    return onSnapshot(q, (snap) => setAdminInvites(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, []);
+
   const approveUser = async (userId) => {
     await updateDoc(doc(db, COLLECTION_USERS, userId), { status: 'active' });
   };
 
   const handleRequest = async (reqId, status) => {
     await updateDoc(doc(db, COLLECTION_REQUESTS, reqId), { status });
+  };
+
+  // Función para promover usuario existente a Admin
+  const promoteToAdmin = async (userId) => {
+    if (!window.confirm("¿Estás seguro de hacer ADMIN a este usuario?")) return;
+    try {
+      await updateDoc(doc(db, COLLECTION_USERS, userId), { role: 'admin', status: 'active' });
+      alert("Usuario promovido a Administrador");
+    } catch (e) {
+      console.error(e);
+      alert("Error al promover.");
+    }
   };
 
   const handleChangeAdminCode = async (e) => {
@@ -635,7 +723,7 @@ const AdminDashboard = ({ user }) => {
   };
 
   const handleResetAdminCode = async () => {
-    if (!window.confirm("¿Estás seguro de que quieres restaurar la contraseña original (123456)?")) return;
+    if (!window.confirm("¿Estás seguro de restaurar la contraseña a 123456?")) return;
     try {
       await setDoc(doc(db, COLLECTION_SETTINGS, 'admin_config'), {
         code: DEFAULT_ADMIN_CODE,
@@ -647,6 +735,29 @@ const AdminDashboard = ({ user }) => {
       console.error(err);
       setConfigMessage("Error al restaurar.");
     }
+  };
+
+  const handleInviteAdmin = async (e) => {
+    e.preventDefault();
+    if (!newAdminEmail.includes('@')) return;
+    try {
+      // Guardar email en colección de invitados (ID = email para evitar duplicados)
+      await setDoc(doc(db, COLLECTION_ADMIN_INVITES, newAdminEmail), {
+        email: newAdminEmail,
+        addedBy: user.email,
+        createdAt: serverTimestamp()
+      });
+      setNewAdminEmail('');
+      alert("¡Administrador invitado! Cuando se registre, tendrá acceso automático.");
+    } catch (e) {
+      console.error(e);
+      alert("Error al invitar.");
+    }
+  };
+
+  const handleDeleteInvite = async (emailId) => {
+    if (!window.confirm("¿Eliminar invitación?")) return;
+    await deleteDoc(doc(db, COLLECTION_ADMIN_INVITES, emailId));
   };
 
   const getFilteredLogs = () => {
@@ -728,13 +839,21 @@ const AdminDashboard = ({ user }) => {
                <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">Gestión de Personal</div>
                <div className="overflow-x-auto">
                  <table className="w-full text-sm text-left">
-                   <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-6 py-3">Nombre</th><th className="px-6 py-3">Estado</th><th className="px-6 py-3">Acción</th></tr></thead>
+                   <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-6 py-3">Nombre</th><th className="px-6 py-3">Rol</th><th className="px-6 py-3">Estado</th><th className="px-6 py-3">Acción</th></tr></thead>
                    <tbody>
                      {allUsers.map(u => (
                        <tr key={u.id} className="border-b hover:bg-gray-50">
-                         <td className="px-6 py-4 font-medium">{u.name}</td>
+                         <td className="px-6 py-4 font-medium">{u.name || 'Sin nombre'}</td>
+                         <td className="px-6 py-4 capitalize">{u.role}</td>
                          <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold ${u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{u.status}</span></td>
-                         <td className="px-6 py-4">{u.status === 'pending' && <button onClick={() => approveUser(u.id)} className="text-white bg-green-600 px-3 py-1 rounded text-xs">Aprobar</button>}</td>
+                         <td className="px-6 py-4 flex gap-2">
+                           {u.status === 'pending' && <button onClick={() => approveUser(u.id)} className="text-white bg-green-600 px-3 py-1 rounded text-xs hover:bg-green-700">Aprobar</button>}
+                           {u.role !== 'admin' && (
+                             <button onClick={() => promoteToAdmin(u.id)} className="text-indigo-600 border border-indigo-200 px-3 py-1 rounded text-xs hover:bg-indigo-50" title="Hacer Administrador">
+                               + Admin
+                             </button>
+                           )}
+                         </td>
                        </tr>
                      ))}
                    </tbody>
@@ -845,23 +964,67 @@ const AdminDashboard = ({ user }) => {
           )}
 
           {activeTab === 'settings' && (
-            <div className="max-w-xl mx-auto space-y-6">
+            <div className="max-w-2xl mx-auto space-y-6">
+              
+              {/* Sección 1: Crear nuevo Admin (Invitación) */}
+              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+                <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2 mb-2">
+                  <UserPlus className="text-green-600" /> Gestión de Administradores
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Pre-autoriza a nuevos administradores. Cuando se registren con este correo, tendrán acceso inmediato.
+                </p>
+                <form onSubmit={handleInviteAdmin} className="flex gap-2">
+                  <input 
+                    type="email" 
+                    required
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                    placeholder="correo@nuevo-admin.com"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                  />
+                  <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700">
+                    Añadir
+                  </button>
+                </form>
+
+                {/* Lista de invitaciones */}
+                {adminInvites.length > 0 && (
+                  <div className="mt-4 border-t pt-4">
+                    <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Invitaciones Pendientes/Activas</h4>
+                    <ul className="space-y-2">
+                      {adminInvites.map(invite => (
+                        <li key={invite.id} className="flex justify-between items-center text-sm bg-gray-50 p-2 rounded">
+                          <div className="flex items-center gap-2">
+                            <Mail size={14} className="text-gray-400"/>
+                            <span>{invite.email}</span>
+                          </div>
+                          <button onClick={() => handleDeleteInvite(invite.id)} className="text-red-500 hover:text-red-700 text-xs font-bold">
+                            Eliminar
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Sección 2: Cambiar código de admin general */}
               <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-indigo-500">
                 <h3 className="font-bold text-gray-700 text-lg flex items-center gap-2 mb-4">
-                  <Key className="text-indigo-600" /> Cambiar Contraseña de Administrador
+                  <Key className="text-indigo-600" /> Cambiar Contraseña General
                 </h3>
                 <p className="text-sm text-gray-500 mb-6">
-                  Esta es la contraseña que los nuevos usuarios deberán introducir para registrarse como administradores.
+                  Esta contraseña sirve para que cualquier usuario se registre como administrador manualmente.
                 </p>
                 
                 <form onSubmit={handleChangeAdminCode} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Nueva Contraseña</label>
                     <input 
                       type="text" 
                       value={newAdminCode}
                       onChange={(e) => setNewAdminCode(e.target.value)}
-                      placeholder="Escribe la nueva clave..."
+                      placeholder="Nueva contraseña general..."
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>
@@ -938,8 +1101,11 @@ export default function App() {
   const handleCompleteProfile = async (formData) => {
     if (!user) return;
     try {
+      // ⚠️ IMPORTANTE: Usamos formData.name explícitamente para asegurar que se guarda
       await setDoc(doc(db, COLLECTION_USERS, user.uid), {
-         ...formData,
+         name: formData.name, // Aseguramos que este campo nunca falte
+         role: formData.role,
+         status: formData.status,
          email: user.email || '', 
          createdAt: serverTimestamp()
       }, { merge: true });
