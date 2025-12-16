@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 
 // --- Constantes ---
-const ADMIN_SECRET = "ADMIN123";
+const ADMIN_SECRET = "1234";
 const COLLECTION_USERS = 'users'; 
 const COLLECTION_LOGS = 'logs';
 const COLLECTION_REQUESTS = 'requests';
