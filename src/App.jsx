@@ -1,17 +1,22 @@
-import React, { useState, useEffect } from 'react';
-// IMPORTANTE: Ahora usamos la configuración de tu archivo local
+import React, { useState, useEffect, useRef } from 'react';
+
+// =============================================================================
+//  🔴 INSTRUCCIONES PARA ACTIVAR EN TU PC (VS CODE)
+// =============================================================================
+//  1. BORRA las dos barras '//' del inicio de las siguientes 2 líneas para activarlas:
+import logoImg from './logo.png'; 
 import { auth, db } from './firebaseConfig';
+
+
 import { 
-  getAuth, 
-  signInAnonymously, 
   onAuthStateChanged,
-  signInWithCustomToken,
-  GoogleAuthProvider,
   signInWithPopup,
+  GoogleAuthProvider,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signOut
 } from 'firebase/auth';
 import { 
-  getFirestore, 
   collection, 
   addDoc, 
   query, 
@@ -19,25 +24,25 @@ import {
   doc, 
   updateDoc, 
   setDoc,
-  serverTimestamp, 
-  orderBy, 
-  where 
+  serverTimestamp
 } from 'firebase/firestore';
 import { 
   Clock, 
   LogIn, 
   LogOut, 
   Coffee, 
-  UserCheck, 
   ShieldAlert, 
   FileText, 
   CheckCircle, 
-  XCircle, 
   Users,
   Briefcase,
   History,
   AlertCircle,
-  Chrome 
+  Chrome,
+  Eye,
+  EyeOff,
+  Printer,
+  FileBarChart
 } from 'lucide-react';
 
 // --- Constantes ---
@@ -46,12 +51,23 @@ const COLLECTION_USERS = 'users';
 const COLLECTION_LOGS = 'logs';
 const COLLECTION_REQUESTS = 'requests';
 
-// --- Componentes ---
+// --- Componentes Auxiliares ---
 
 const Logo = () => (
   <div className="flex items-center justify-center mb-6">
-    <div className="w-24 h-24 bg-blue-900 rounded-full flex items-center justify-center shadow-lg border-4 border-white">
-      <Briefcase className="w-12 h-12 text-white" />
+    <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-lg border-4 border-blue-900 overflow-hidden">
+      <img 
+        src={logoImg} 
+        alt="Logo Club" 
+        className="w-full h-full object-cover" 
+        onError={(e) => {
+          e.target.style.display = 'none';
+          // Si falla la imagen, mostramos el icono
+          const icon = e.target.nextSibling;
+          if(icon) icon.style.opacity = 1;
+        }} 
+      />
+      <Briefcase className="w-10 h-10 text-blue-900 absolute opacity-0 transition-opacity duration-300" style={{opacity: 0}} />
     </div>
   </div>
 );
@@ -62,13 +78,17 @@ const Loading = () => (
   </div>
 );
 
-// --- Pantalla de Autenticación / Registro ---
-const AuthScreen = ({ onLogin, currentUser }) => {
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [name, setName] = useState(currentUser?.displayName || '');
-  const [role, setRole] = useState('employee'); // employee | admin
-  const [adminCode, setAdminCode] = useState('');
+// --- Pantalla de Autenticación Unificada ---
+const AuthScreen = ({ onCompleteProfile, currentUser }) => {
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  
+  const [name, setName] = useState(currentUser?.displayName || '');
+  const [role, setRole] = useState('employee');
+  const [adminCode, setAdminCode] = useState('');
 
   useEffect(() => {
     if (currentUser?.displayName) {
@@ -82,16 +102,38 @@ const AuthScreen = ({ onLogin, currentUser }) => {
       await signInWithPopup(auth, provider);
     } catch (err) {
       console.error(err);
-      setError("Error al iniciar sesión con Google. Intenta de nuevo.");
+      setError("Error con Google. Intenta de nuevo.");
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleEmailAuth = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!email || !password) {
+      setError("Por favor completa todos los campos.");
+      return;
+    }
+    try {
+      if (authMode === 'login') {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err) {
+      console.error(err);
+      if (err.code === 'auth/invalid-credential') setError("Credenciales incorrectas.");
+      else if (err.code === 'auth/email-already-in-use') setError("El correo ya está registrado.");
+      else if (err.code === 'auth/weak-password') setError("La contraseña debe tener al menos 6 caracteres.");
+      else setError("Ocurrió un error. Intenta de nuevo.");
+    }
+  };
+
+  const handleProfileSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     if (!name.trim()) {
-      setError('Por favor ingresa tu nombre.');
+      setError('Ingresa tu nombre completo.');
       return;
     }
 
@@ -100,42 +142,107 @@ const AuthScreen = ({ onLogin, currentUser }) => {
       return;
     }
 
-    onLogin({ name, role, status: role === 'admin' ? 'active' : 'pending' });
+    onCompleteProfile({ name, role, status: role === 'admin' ? 'active' : 'pending' });
   };
 
-  const isProfilePending = !!currentUser;
+  // Si NO hay usuario autenticado (ni por Google ni por Email)
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+          <Logo />
+          
+          <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
+            <button 
+              className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'login' ? 'bg-white text-blue-900 shadow' : 'text-gray-500'}`}
+              onClick={() => {setAuthMode('login'); setError('');}}
+            >
+              Iniciar Sesión
+            </button>
+            <button 
+              className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'register' ? 'bg-white text-blue-900 shadow' : 'text-gray-500'}`}
+              onClick={() => {setAuthMode('register'); setError('');}}
+            >
+              Registrarse
+            </button>
+          </div>
 
+          <form onSubmit={handleEmailAuth} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Correo Electrónico</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                placeholder="nombre@ejemplo.com"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-center gap-2">
+                <AlertCircle size={16} /> {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+            >
+              {authMode === 'login' ? 'Entrar' : 'Crear Cuenta'} <LogIn size={20} />
+            </button>
+          </form>
+
+          <div className="mt-6">
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-gray-200"></div>
+              <span className="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase">O continúa con</span>
+              <div className="flex-grow border-t border-gray-200"></div>
+            </div>
+            <button
+              onClick={handleGoogleLogin}
+              type="button"
+              className="w-full mt-4 bg-white border border-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-all hover:bg-gray-50 shadow-sm flex items-center justify-center gap-2"
+            >
+              <Chrome size={20} className="text-red-500" /> Google
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Si hay usuario pero falta completar perfil (nombre/rol)
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
         <Logo />
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
-          {isProfilePending ? 'Completar Registro' : (isRegistering ? 'Registro de Personal' : 'Acceso al Sistema')}
-        </h2>
-        <p className="text-center text-gray-500 mb-6">
-          {isProfilePending 
-            ? `Hola, ${currentUser.displayName || 'Usuario'}. Por favor selecciona tu rol.` 
-            : 'Control de Acceso y Fichaje'}
-        </p>
+        <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">Completar Perfil</h2>
+        <p className="text-center text-gray-500 mb-6">Hola, necesitamos unos datos más.</p>
 
-        {!isProfilePending && (
-          <div className="mb-6">
-             <button
-              onClick={handleGoogleLogin}
-              type="button"
-              className="w-full bg-white border border-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-all hover:bg-gray-50 shadow-sm flex items-center justify-center gap-2 mb-4"
-            >
-              <Chrome size={20} className="text-red-500" /> Iniciar con Google
-            </button>
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-gray-200"></div>
-              <span className="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase">O ingresa manualmente</span>
-              <div className="flex-grow border-t border-gray-200"></div>
-            </div>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleProfileSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Completo</label>
             <input
@@ -144,7 +251,6 @@ const AuthScreen = ({ onLogin, currentUser }) => {
               onChange={(e) => setName(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
               placeholder="Ej. Juan Pérez"
-              disabled={!!currentUser?.displayName}
             />
           </div>
 
@@ -196,20 +302,18 @@ const AuthScreen = ({ onLogin, currentUser }) => {
           )}
 
           <div className="flex gap-2">
-             {isProfilePending && (
-                <button
-                  type="button"
-                  onClick={() => signOut(auth)}
-                  className="w-1/3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-all"
-                >
-                  Cancelar
-                </button>
-             )}
+             <button
+                type="button"
+                onClick={() => signOut(auth)}
+                className="w-1/3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-all"
+              >
+                Cancelar
+              </button>
             <button
               type="submit"
-              className={`bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 rounded-xl transition-all transform active:scale-95 shadow-lg flex items-center justify-center gap-2 ${isProfilePending ? 'w-2/3' : 'w-full'}`}
+              className="w-2/3 bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
             >
-              {isProfilePending ? 'Confirmar y Entrar' : (isRegistering ? 'Crear Cuenta' : 'Entrar')} <LogIn size={20} />
+              Guardar y Entrar <CheckCircle size={20} />
             </button>
           </div>
         </form>
@@ -228,43 +332,37 @@ const EmployeeDashboard = ({ user, userDocId }) => {
   const [correctionDate, setCorrectionDate] = useState('');
   const [myRequests, setMyRequests] = useState([]);
 
-  // Cargar historial de logs
   useEffect(() => {
     if (!userDocId) return;
     const q = query(collection(db, COLLECTION_LOGS));
-    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const myLogs = allLogs
         .filter(log => log.userId === userDocId)
         .sort((a, b) => b.timestamp?.seconds - a.timestamp?.seconds); 
-      
       setLogs(myLogs);
-
       if (myLogs.length > 0) {
         const lastLog = myLogs[0];
         if (lastLog.type === 'in') setStatus('in');
         else if (lastLog.type === 'break_start') setStatus('break');
         else setStatus('out');
       }
-    }, (error) => console.error("Error fetching logs:", error));
+    });
     return () => unsubscribe();
   }, [userDocId]);
 
-  // Cargar mis solicitudes
   useEffect(() => {
     if (!userDocId) return;
     const q = collection(db, COLLECTION_REQUESTS);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setMyRequests(reqs.filter(r => r.userId === userDocId));
-    }, (error) => console.error("Error fetching requests:", error));
+    });
     return () => unsubscribe();
   }, [userDocId]);
 
   const handleClockAction = async (type) => {
     if (user.status !== 'active') return;
-
     try {
       await addDoc(collection(db, COLLECTION_LOGS), {
         userId: userDocId,
@@ -274,14 +372,13 @@ const EmployeeDashboard = ({ user, userDocId }) => {
         dateString: new Date().toLocaleDateString()
       });
     } catch (e) {
-      console.error("Error al fichar:", e);
+      console.error(e);
     }
   };
 
   const submitCorrection = async (e) => {
     e.preventDefault();
     if (!correctionDate || !correctionTime || !correctionReason) return;
-
     try {
       await addDoc(collection(db, COLLECTION_REQUESTS), {
         userId: userDocId,
@@ -296,15 +393,8 @@ const EmployeeDashboard = ({ user, userDocId }) => {
       setCorrectionReason('');
       setCorrectionTime('');
       setCorrectionDate('');
-      alert('Solicitud enviada correctamente');
-    } catch (e) {
-      console.error("Error enviando solicitud:", e);
-    }
-  };
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    window.location.reload();
+      alert('Solicitud enviada');
+    } catch (e) { console.error(e); }
   };
 
   if (user.status === 'pending') {
@@ -312,10 +402,8 @@ const EmployeeDashboard = ({ user, userDocId }) => {
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
         <Clock className="w-16 h-16 text-yellow-500 mb-4" />
         <h2 className="text-2xl font-bold text-gray-800">Cuenta Pendiente</h2>
-        <p className="text-gray-600 mt-2 max-w-md">
-          Tu cuenta ha sido creada pero requiere aprobación del administrador para poder fichar.
-        </p>
-        <button onClick={handleLogout} className="mt-6 text-blue-600 underline text-sm">Cerrar Sesión</button>
+        <p className="text-gray-600 mt-2 max-w-md">Tu cuenta espera aprobación del administrador.</p>
+        <button onClick={() => {signOut(auth); window.location.reload();}} className="mt-6 text-blue-600 underline text-sm">Cerrar Sesión</button>
       </div>
     );
   }
@@ -325,25 +413,17 @@ const EmployeeDashboard = ({ user, userDocId }) => {
       <header className="bg-blue-900 text-white p-4 shadow-md">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-blue-900">
-              <Briefcase size={20} />
+            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center overflow-hidden">
+               <img src={logoImg} className="w-full h-full object-cover" />
             </div>
             <div>
               <h1 className="font-bold text-lg">{user.name}</h1>
               <p className="text-blue-200 text-xs">Panel de Empleado</p>
             </div>
           </div>
-          <div className="text-right flex items-center gap-4">
-             <div className="hidden md:block">
-                <div className="text-sm opacity-80">{new Date().toLocaleDateString()}</div>
-                <div className="font-mono text-xl font-bold">
-                   {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </div>
-             </div>
-             <button onClick={handleLogout} className="bg-blue-800 p-2 rounded hover:bg-blue-700" title="Cerrar Sesión">
-               <LogOut size={18} />
-             </button>
-          </div>
+          <button onClick={() => {signOut(auth); window.location.reload();}} className="bg-blue-800 p-2 rounded hover:bg-blue-700">
+             <LogOut size={18} />
+          </button>
         </div>
       </header>
 
@@ -352,91 +432,42 @@ const EmployeeDashboard = ({ user, userDocId }) => {
           <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
             <Clock className="text-blue-600" /> Control de Acceso
           </h2>
-          
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button
-              onClick={() => handleClockAction('in')}
-              disabled={status === 'in' || status === 'break'}
-              className={`p-6 rounded-xl flex flex-col items-center gap-3 transition-all ${
-                status === 'out' 
-                  ? 'bg-green-100 text-green-800 hover:bg-green-200 border-2 border-green-500 shadow-sm' 
-                  : 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-100'
-              }`}
-            >
-              <LogIn size={32} />
-              <span className="font-bold text-lg">Entrada</span>
+            <button onClick={() => handleClockAction('in')} disabled={status === 'in' || status === 'break'} className={`p-6 rounded-xl flex flex-col items-center gap-3 transition-all ${status === 'out' ? 'bg-green-100 text-green-800 border-2 border-green-500' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
+              <LogIn size={32} /> <span className="font-bold text-lg">Entrada</span>
             </button>
-
-            <button
-              onClick={() => handleClockAction('break_start')}
-              disabled={status !== 'in'}
-              className={`p-6 rounded-xl flex flex-col items-center gap-3 transition-all ${
-                status === 'in' 
-                  ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-2 border-yellow-500 shadow-sm' 
-                  : 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-100'
-              }`}
-            >
-              <Coffee size={32} />
-              <span className="font-bold text-lg">Pausa</span>
+            <button onClick={() => handleClockAction('break_start')} disabled={status !== 'in'} className={`p-6 rounded-xl flex flex-col items-center gap-3 transition-all ${status === 'in' ? 'bg-yellow-100 text-yellow-800 border-2 border-yellow-500' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
+              <Coffee size={32} /> <span className="font-bold text-lg">Pausa</span>
             </button>
-
-            <button
-              onClick={() => handleClockAction(status === 'break' ? 'in' : 'out')} 
-              disabled={status === 'out'}
-              className={`p-6 rounded-xl flex flex-col items-center gap-3 transition-all ${
-                status !== 'out' 
-                  ? 'bg-red-100 text-red-800 hover:bg-red-200 border-2 border-red-500 shadow-sm' 
-                  : 'bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-100'
-              }`}
-            >
-              <LogOut size={32} />
-              <span className="font-bold text-lg">
-                {status === 'break' ? 'Volver de Pausa' : 'Salida'}
-              </span>
+            <button onClick={() => handleClockAction(status === 'break' ? 'in' : 'out')} disabled={status === 'out'} className={`p-6 rounded-xl flex flex-col items-center gap-3 transition-all ${status !== 'out' ? 'bg-red-100 text-red-800 border-2 border-red-500' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
+              <LogOut size={32} /> <span className="font-bold text-lg">{status === 'break' ? 'Volver' : 'Salida'}</span>
             </button>
           </div>
-
           <div className="mt-6 text-center">
-            <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${
-              status === 'in' ? 'bg-green-100 text-green-700' :
-              status === 'break' ? 'bg-yellow-100 text-yellow-700' :
-              'bg-gray-100 text-gray-600'
-            }`}>
-              Estado actual: {status === 'in' ? 'Trabajando' : status === 'break' ? 'En Pausa' : 'Fuera de turno'}
+            <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${status === 'in' ? 'bg-green-100 text-green-700' : status === 'break' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>
+              Estado: {status === 'in' ? 'Trabajando' : status === 'break' ? 'En Pausa' : 'Fuera'}
             </span>
           </div>
         </div>
 
         <div className="flex justify-end">
-           <button 
-             onClick={() => setShowCorrection(!showCorrection)}
-             className="text-blue-600 font-medium hover:underline text-sm flex items-center gap-1"
-           >
+           <button onClick={() => setShowCorrection(!showCorrection)} className="text-blue-600 font-medium hover:underline text-sm flex items-center gap-1">
              <AlertCircle size={16} /> ¿Olvidaste fichar? Solicitar corrección
            </button>
         </div>
 
         {showCorrection && (
-          <div className="bg-white rounded-xl shadow-md p-6 animate-in slide-in-from-top-4 border border-blue-100">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-blue-100">
             <h3 className="font-bold text-gray-800 mb-4">Solicitud de Corrección Manual</h3>
             <form onSubmit={submitCorrection} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase">Fecha</label>
-                  <input type="date" required className="w-full mt-1 p-2 border rounded" value={correctionDate} onChange={e=>setCorrectionDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase">Hora Correcta</label>
-                  <input type="time" required className="w-full mt-1 p-2 border rounded" value={correctionTime} onChange={e=>setCorrectionTime(e.target.value)} />
-                </div>
+                <input type="date" required className="w-full p-2 border rounded" value={correctionDate} onChange={e=>setCorrectionDate(e.target.value)} />
+                <input type="time" required className="w-full p-2 border rounded" value={correctionTime} onChange={e=>setCorrectionTime(e.target.value)} />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase">Motivo</label>
-                <textarea required className="w-full mt-1 p-2 border rounded" rows="2" placeholder="Ej. Olvidé fichar la salida porque..." value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)}></textarea>
-              </div>
+              <textarea required className="w-full p-2 border rounded" rows="2" placeholder="Motivo..." value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)}></textarea>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={()=>setShowCorrection(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded">Cancelar</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Enviar Solicitud</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Enviar</button>
               </div>
             </form>
           </div>
@@ -444,45 +475,33 @@ const EmployeeDashboard = ({ user, userDocId }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow p-5">
-            <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} /> Últimos Registros</h3>
-            <div className="space-y-3 max-h-64 overflow-y-auto">
-              {logs.length === 0 ? <p className="text-gray-400 text-sm italic">No hay registros aún.</p> : null}
-              {logs.map(log => (
-                <div key={log.id} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm">
-                  <span className={`font-medium ${
-                    log.type === 'in' ? 'text-green-600' :
-                    log.type === 'out' ? 'text-red-600' : 'text-yellow-600'
-                  }`}>
-                    {log.type === 'in' ? 'Entrada' : log.type === 'out' ? 'Salida' : 'Pausa'}
-                  </span>
-                  <span className="text-gray-500">
-                    {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : 'Procesando...'}
-                  </span>
-                </div>
-              ))}
-            </div>
+             <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} /> Últimos Registros</h3>
+             <div className="space-y-2 max-h-60 overflow-y-auto">
+               {logs.map(log => (
+                 <div key={log.id} className="flex justify-between p-2 bg-gray-50 rounded text-xs">
+                   <span className={log.type==='in'?'text-green-600':log.type==='out'?'text-red-600':'text-yellow-600'}>
+                     {log.type === 'in' ? 'Entrada' : log.type === 'out' ? 'Salida' : 'Pausa'}
+                   </span>
+                   <span>{log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '...'}</span>
+                 </div>
+               ))}
+             </div>
           </div>
-
           <div className="bg-white rounded-xl shadow p-5">
-            <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><FileText size={18} /> Mis Solicitudes</h3>
-             <div className="space-y-3 max-h-64 overflow-y-auto">
-              {myRequests.length === 0 ? <p className="text-gray-400 text-sm italic">No hay solicitudes pendientes.</p> : null}
-              {myRequests.map(req => (
-                <div key={req.id} className="p-3 border border-gray-100 rounded bg-gray-50">
-                   <div className="flex justify-between mb-1">
-                     <span className="text-xs font-bold text-gray-600">{req.date} - {req.time}</span>
-                     <span className={`text-xs px-2 py-0.5 rounded-full ${
-                       req.status === 'approved' ? 'bg-green-100 text-green-700' :
-                       req.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                       'bg-yellow-100 text-yellow-700'
-                     }`}>
-                       {req.status === 'approved' ? 'Aprobada' : req.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
-                     </span>
-                   </div>
-                   <p className="text-xs text-gray-500 truncate">{req.reason}</p>
-                </div>
-              ))}
-            </div>
+             <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><FileText size={18} /> Mis Solicitudes</h3>
+             <div className="space-y-2 max-h-60 overflow-y-auto">
+               {myRequests.map(req => (
+                 <div key={req.id} className="p-2 border rounded bg-gray-50 text-xs">
+                    <div className="flex justify-between font-bold">
+                      <span>{req.date} {req.time}</span>
+                      <span className={req.status==='approved'?'text-green-600':req.status==='rejected'?'text-red-600':'text-yellow-600'}>
+                        {req.status === 'approved' ? 'Aprobada' : req.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
+                      </span>
+                    </div>
+                    <div className="truncate text-gray-500">{req.reason}</div>
+                 </div>
+               ))}
+             </div>
           </div>
         </div>
       </main>
@@ -496,19 +515,16 @@ const AdminDashboard = ({ user }) => {
   const [allUsers, setAllUsers] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [allLogs, setAllLogs] = useState([]);
+  const [reportFilter, setReportFilter] = useState('week');
 
   useEffect(() => {
     const q = collection(db, COLLECTION_USERS);
-    return onSnapshot(q, (snap) => {
-      setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    return onSnapshot(q, (snap) => setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
 
   useEffect(() => {
     const q = collection(db, COLLECTION_REQUESTS);
-    return onSnapshot(q, (snap) => {
-      setPendingRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.status === 'pending'));
-    });
+    return onSnapshot(q, (snap) => setPendingRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.status === 'pending')));
   }, []);
 
   useEffect(() => {
@@ -520,25 +536,53 @@ const AdminDashboard = ({ user }) => {
   }, []);
 
   const approveUser = async (userId) => {
-    await updateDoc(doc(db, COLLECTION_USERS, userId), {
-      status: 'active'
-    });
+    await updateDoc(doc(db, COLLECTION_USERS, userId), { status: 'active' });
   };
 
   const handleRequest = async (reqId, status) => {
-    await updateDoc(doc(db, COLLECTION_REQUESTS, reqId), {
-      status
+    await updateDoc(doc(db, COLLECTION_REQUESTS, reqId), { status });
+  };
+
+  const getFilteredLogs = () => {
+    const now = new Date();
+    const startOfPeriod = new Date();
+    
+    if (reportFilter === 'week') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1); 
+      startOfPeriod.setDate(diff);
+      startOfPeriod.setHours(0,0,0,0);
+    } else if (reportFilter === 'month') {
+      startOfPeriod.setDate(1);
+      startOfPeriod.setHours(0,0,0,0);
+    } else if (reportFilter === 'year') {
+      startOfPeriod.setMonth(0, 1);
+      startOfPeriod.setHours(0,0,0,0);
+    }
+
+    return allLogs.filter(log => {
+      if (!log.timestamp) return false;
+      const logDate = new Date(log.timestamp.seconds * 1000);
+      return logDate >= startOfPeriod;
     });
   };
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    window.location.reload(); 
+  const printReport = () => {
+    window.print();
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
-      <header className="bg-indigo-900 text-white shadow-lg">
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          body { background: white; }
+          .report-container { box-shadow: none; border: none; }
+        }
+      `}</style>
+
+      <header className="bg-indigo-900 text-white shadow-lg no-print">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <ShieldAlert size={28} />
@@ -546,7 +590,7 @@ const AdminDashboard = ({ user }) => {
           </div>
           <div className="flex items-center gap-4">
              <div className="text-sm bg-indigo-800 px-3 py-1 rounded-full">{user.name}</div>
-             <button onClick={handleLogout} className="text-indigo-200 hover:text-white" title="Cerrar Sesión">
+             <button onClick={() => {signOut(auth); window.location.reload();}} className="text-indigo-200 hover:text-white">
                <LogOut size={20} />
              </button>
           </div>
@@ -554,159 +598,137 @@ const AdminDashboard = ({ user }) => {
       </header>
 
       <div className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
-        <nav className="space-y-2">
-          <button 
-            onClick={() => setActiveTab('users')}
-            className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${
-              activeTab === 'users' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            <Users size={18} /> Usuarios
-             {allUsers.filter(u => u.status === 'pending').length > 0 && (
-               <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                 {allUsers.filter(u => u.status === 'pending').length}
-               </span>
-             )}
+        <nav className="space-y-2 no-print">
+          <button onClick={() => setActiveTab('users')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'users' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
+            <Users size={18} /> Usuarios {allUsers.filter(u => u.status === 'pending').length > 0 && <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{allUsers.filter(u => u.status === 'pending').length}</span>}
           </button>
-          <button 
-            onClick={() => setActiveTab('requests')}
-            className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${
-              activeTab === 'requests' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            <FileText size={18} /> Solicitudes
-            {pendingRequests.length > 0 && (
-               <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                 {pendingRequests.length}
-               </span>
-             )}
+          <button onClick={() => setActiveTab('requests')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'requests' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
+            <FileText size={18} /> Solicitudes {pendingRequests.length > 0 && <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pendingRequests.length}</span>}
           </button>
-          <button 
-            onClick={() => setActiveTab('logs')}
-            className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${
-              activeTab === 'logs' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'
-            }`}
-          >
+          <button onClick={() => setActiveTab('logs')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'logs' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
             <History size={18} /> Registros Globales
+          </button>
+          <button onClick={() => setActiveTab('reports')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'reports' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
+            <FileBarChart size={18} /> Informes
           </button>
         </nav>
 
         <main className="md:col-span-3">
           {activeTab === 'users' && (
             <div className="bg-white rounded-xl shadow-md overflow-hidden">
-              <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                <h3 className="font-bold text-gray-700">Gestión de Personal</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
-                    <tr>
-                      <th className="px-6 py-3">Nombre</th>
-                      <th className="px-6 py-3">Rol</th>
-                      <th className="px-6 py-3">Estado</th>
-                      <th className="px-6 py-3">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allUsers.map(u => (
-                      <tr key={u.id} className="bg-white border-b hover:bg-gray-50">
-                        <td className="px-6 py-4 font-medium text-gray-900">{u.name}</td>
-                        <td className="px-6 py-4">{u.role === 'admin' ? 'Admin' : 'Empleado'}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                            u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {u.status === 'active' ? 'Activo' : 'Pendiente'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {u.status === 'pending' && (
-                            <button 
-                              onClick={() => approveUser(u.id)}
-                              className="text-white bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs flex items-center gap-1"
-                            >
-                              <CheckCircle size={14} /> Aprobar
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+               <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">Gestión de Personal</div>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-sm text-left">
+                   <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-6 py-3">Nombre</th><th className="px-6 py-3">Estado</th><th className="px-6 py-3">Acción</th></tr></thead>
+                   <tbody>
+                     {allUsers.map(u => (
+                       <tr key={u.id} className="border-b hover:bg-gray-50">
+                         <td className="px-6 py-4 font-medium">{u.name}</td>
+                         <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold ${u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{u.status}</span></td>
+                         <td className="px-6 py-4">{u.status === 'pending' && <button onClick={() => approveUser(u.id)} className="text-white bg-green-600 px-3 py-1 rounded text-xs">Aprobar</button>}</td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
             </div>
           )}
 
           {activeTab === 'requests' && (
-            <div className="space-y-4">
-              <h3 className="font-bold text-gray-700 mb-2">Solicitudes de Corrección ({pendingRequests.length})</h3>
-              {pendingRequests.length === 0 && (
-                <div className="bg-white p-8 rounded-xl shadow text-center text-gray-400">
-                  No hay solicitudes pendientes.
-                </div>
-              )}
-              {pendingRequests.map(req => (
-                <div key={req.id} className="bg-white p-6 rounded-xl shadow-md border-l-4 border-yellow-400 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div>
-                    <h4 className="font-bold text-gray-800">{req.userName}</h4>
-                    <p className="text-sm text-gray-600">
-                      Solicita fichaje manual para el <span className="font-bold">{req.date}</span> a las <span className="font-bold">{req.time}</span>.
-                    </p>
-                    <p className="text-xs text-gray-500 mt-2 bg-gray-50 p-2 rounded">
-                      " {req.reason} "
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => handleRequest(req.id, 'rejected')}
-                      className="px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium"
-                    >
-                      Rechazar
-                    </button>
-                    <button 
-                      onClick={() => handleRequest(req.id, 'approved')}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow"
-                    >
-                      Aprobar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+             <div className="space-y-4">
+               {pendingRequests.length === 0 && <div className="text-center text-gray-400 py-10">No hay solicitudes.</div>}
+               {pendingRequests.map(req => (
+                 <div key={req.id} className="bg-white p-4 rounded-xl shadow border-l-4 border-yellow-400 flex flex-col md:flex-row justify-between items-center gap-4">
+                   <div>
+                     <h4 className="font-bold">{req.userName}</h4>
+                     <p className="text-sm">Fichaje manual: {req.date} a las {req.time}</p>
+                     <p className="text-xs text-gray-500 italic">"{req.reason}"</p>
+                   </div>
+                   <div className="flex gap-2">
+                     <button onClick={() => handleRequest(req.id, 'rejected')} className="px-3 py-1 border border-red-200 text-red-600 rounded text-sm">Rechazar</button>
+                     <button onClick={() => handleRequest(req.id, 'approved')} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Aprobar</button>
+                   </div>
+                 </div>
+               ))}
+             </div>
           )}
 
           {activeTab === 'logs' && (
-            <div className="bg-white rounded-xl shadow-md overflow-hidden">
-              <div className="p-4 border-b border-gray-100 bg-gray-50">
-                <h3 className="font-bold text-gray-700">Bitácora Global de Fichajes</h3>
+             <div className="bg-white rounded-xl shadow-md overflow-hidden">
+               <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">Bitácora en Vivo</div>
+               <div className="max-h-[600px] overflow-y-auto">
+                 <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0"><tr><th className="px-6 py-3">Empleado</th><th className="px-6 py-3">Acción</th><th className="px-6 py-3">Fecha</th></tr></thead>
+                    <tbody>
+                      {allLogs.map(log => (
+                        <tr key={log.id} className="border-b hover:bg-gray-50">
+                          <td className="px-6 py-4">{log.userName}</td>
+                          <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold ${log.type==='in'?'bg-green-100 text-green-700':log.type==='out'?'bg-red-100 text-red-700':'bg-yellow-100'}`}>{log.type}</span></td>
+                          <td className="px-6 py-4 text-gray-500">{log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '...'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                 </table>
+               </div>
+             </div>
+          )}
+
+          {activeTab === 'reports' && (
+            <div className="bg-white rounded-xl shadow-md p-6 report-container">
+              <div className="flex flex-col md:flex-row justify-between items-center mb-6 no-print">
+                <h3 className="font-bold text-gray-700 text-lg flex items-center gap-2">
+                  <FileBarChart className="text-blue-600" /> Generador de Informes
+                </h3>
+                <div className="flex gap-2 mt-4 md:mt-0">
+                  <select 
+                    value={reportFilter}
+                    onChange={(e) => setReportFilter(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="week">Esta Semana</option>
+                    <option value="month">Este Mes</option>
+                    <option value="year">Este Año</option>
+                  </select>
+                  <button 
+                    onClick={printReport}
+                    className="bg-blue-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-blue-800 transition-colors"
+                  >
+                    <Printer size={16} /> Imprimir PDF
+                  </button>
+                </div>
               </div>
-              <div className="max-h-[600px] overflow-y-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs text-gray-500 uppercase bg-gray-50 sticky top-0">
+
+              <div className="hidden print-only mb-6 text-center">
+                 <h1 className="text-2xl font-bold text-blue-900">Informe de Asistencia</h1>
+                 <p className="text-gray-500">Periodo: {reportFilter === 'week' ? 'Semanal' : reportFilter === 'month' ? 'Mensual' : 'Anual'}</p>
+                 <p className="text-xs text-gray-400">Generado el: {new Date().toLocaleDateString()}</p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left border border-gray-200">
+                  <thead className="bg-gray-100 text-xs uppercase text-gray-700">
                     <tr>
-                      <th className="px-6 py-3">Empleado</th>
-                      <th className="px-6 py-3">Acción</th>
-                      <th className="px-6 py-3">Fecha/Hora</th>
+                      <th className="px-4 py-3 border-b">Empleado</th>
+                      <th className="px-4 py-3 border-b">Evento</th>
+                      <th className="px-4 py-3 border-b">Fecha y Hora</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {allLogs.map(log => (
-                      <tr key={log.id} className="bg-white border-b hover:bg-gray-50">
-                        <td className="px-6 py-4 font-medium">{log.userName}</td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold ${
-                            log.type === 'in' ? 'bg-green-100 text-green-700' :
-                            log.type === 'out' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {log.type === 'in' ? <LogIn size={12}/> : log.type === 'out' ? <LogOut size={12}/> : <Coffee size={12}/>}
-                            {log.type === 'in' ? 'Entrada' : log.type === 'out' ? 'Salida' : 'Pausa'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-gray-500">
-                           {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '...'}
-                        </td>
-                      </tr>
-                    ))}
+                    {getFilteredLogs().length === 0 ? (
+                      <tr><td colSpan="3" className="px-4 py-8 text-center text-gray-400">No hay datos en este periodo.</td></tr>
+                    ) : (
+                      getFilteredLogs().map(log => (
+                        <tr key={log.id} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium">{log.userName}</td>
+                          <td className="px-4 py-3">
+                             {log.type === 'in' ? 'ENTRADA' : log.type === 'out' ? 'SALIDA' : 'PAUSA'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : ''}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -718,24 +740,13 @@ const AdminDashboard = ({ user }) => {
   );
 };
 
-// --- Componente Principal ---
 export default function App() {
   const [user, setUser] = useState(null); 
   const [userData, setUserData] = useState(null); 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initAuth = async () => {
-       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        // En entorno de preview, auth anonima de fallback si no hay token
-        // En tu PC esto no se ejecutará si usas el import local
-        // await signInAnonymously(auth); 
-      }
-    };
-    initAuth();
-    
+    // Escuchar cambios en la autenticación
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser) setLoading(false);
@@ -744,41 +755,30 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Si no hay usuario, no hacemos nada
     if (!user) {
       setUserData(null);
       return;
     }
-
+    // Si hay usuario, escuchamos su perfil en Firestore
     const userProfileRef = doc(db, COLLECTION_USERS, user.uid);
-    
     const unsub = onSnapshot(userProfileRef, (docSnap) => {
       if (docSnap.exists()) {
         setUserData({ ...docSnap.data(), uid: user.uid });
       } else {
-        setUserData(null); 
+        setUserData(null); // Auth ok, pero sin perfil en BD
       }
       setLoading(false);
-    }, (err) => {
-      console.error(err);
-      setLoading(false);
     });
-
     return () => unsub();
   }, [user]);
 
-  const handleRegisterOrLogin = async (formData) => {
-    if (!user) {
-      // Intento de login anónimo si falla google auth en preview
-      await signInAnonymously(auth);
-    }
-    
-    const currentUser = auth.currentUser;
-    if (!currentUser) return; 
-
+  const handleCompleteProfile = async (formData) => {
+    if (!user) return;
     try {
-      await setDoc(doc(db, COLLECTION_USERS, currentUser.uid), {
+      await setDoc(doc(db, COLLECTION_USERS, user.uid), {
          ...formData,
-         email: currentUser.email || '', 
+         email: user.email || '', 
          createdAt: serverTimestamp()
       }, { merge: true });
     } catch (e) {
@@ -788,8 +788,9 @@ export default function App() {
 
   if (loading) return <Loading />;
 
-  if (!userData) {
-    return <AuthScreen onLogin={handleRegisterOrLogin} currentUser={user} />;
+  // Si no está logueado O si está logueado pero no tiene perfil (rol)
+  if (!user || !userData) {
+    return <AuthScreen onCompleteProfile={handleCompleteProfile} currentUser={user} />;
   }
 
   if (userData.role === 'admin') {
