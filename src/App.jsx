@@ -31,14 +31,6 @@ import {
 import logoImg from "./logo.png";
 import { auth, db } from "./firebaseConfig";
 
-// ⚠️ SOLO PARA ESTE CHAT (si lo usas aquí). En tu repo real QUÍTALO.
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-const logoImg = "https://via.placeholder.com/150";
-const appDummy = initializeApp({ apiKey: "dummy", projectId: "dummy" });
-const auth = getAuth(appDummy);
-const db = getFirestore(appDummy);
 
 import {
   Clock,
