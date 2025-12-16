@@ -28,9 +28,11 @@ import {
 } from "firebase/firestore";
 
 // ✅ En tu repo real:
+// import logoImg from "./logo.png";
+// import { auth, db } from "./firebaseConfig";
+
 import logoImg from "./logo.png";
 import { auth, db } from "./firebaseConfig";
-
 
 import {
   Clock,
@@ -113,16 +115,25 @@ const minutesToHHMM = (mins) => {
 };
 
 // ======================
-// Contraste global (tokens)
+// Estilo visual (Material-like / alto contraste)
 // ======================
 const UI = {
-  page: "min-h-[100dvh] bg-gray-50 text-gray-900",
-  card: "bg-white rounded-xl shadow border border-gray-200",
-  tableHead: "bg-gray-100 text-gray-700",
-  row: "border-t hover:bg-gray-50",
-  cell: "px-6 py-4 text-gray-800",
-  nameCell: "px-6 py-4 font-semibold text-gray-900",
-  badgeBase: "px-2 py-1 rounded-full text-xs font-bold border",
+  page: "min-h-[100dvh] bg-[#f6f7fb] text-slate-900",
+  card: "bg-white rounded-2xl shadow-sm border border-slate-200",
+  cardHeader: "px-5 py-4 border-b border-slate-200 bg-slate-50 rounded-t-2xl",
+  tableHead: "bg-slate-50 text-slate-700",
+  row: "border-t border-slate-100 hover:bg-slate-50/60",
+  cell: "px-5 py-4 text-slate-900",
+  nameCell: "px-5 py-4 font-semibold text-slate-900",
+  badgeBase: "px-2.5 py-1 rounded-full text-[11px] font-bold border tracking-wide",
+  input:
+    "w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-500",
+  inputCompact:
+    "px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-500",
+  buttonPrimary:
+    "bg-blue-700 hover:bg-blue-600 text-white font-semibold rounded-xl shadow-sm px-4 py-2.5",
+  buttonOutline:
+    "border border-slate-300 hover:bg-slate-50 text-slate-900 font-semibold rounded-xl px-4 py-2.5",
 };
 
 const userStatusBadgeClass = (status) => {
@@ -477,7 +488,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
               <label className="block text-sm font-medium text-gray-900 mb-1">Correo electrónico</label>
               <input
                 type="email"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none text-gray-900"
+                className={UI.input}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="usuario@club.com"
@@ -490,7 +501,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none pr-10 text-gray-900"
+                  className={`${UI.input} pr-10`}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -566,7 +577,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
             <label className="block text-sm font-medium text-gray-900 mb-1">Nombre completo</label>
             <input
               type="text"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none text-gray-900"
+              className={UI.input}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej. Pedro Moya"
@@ -598,7 +609,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
               <label className="block text-sm font-medium text-gray-900 mb-1">Código de administrador</label>
               <input
                 type="password"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:outline-none text-gray-900"
+                className={UI.input}
                 value={adminCode}
                 onChange={(e) => setAdminCode(e.target.value)}
                 placeholder="Introduce el código"
@@ -974,21 +985,21 @@ const EmployeeDashboard = ({ user, userDocId }) => {
                 <input
                   type="date"
                   required
-                  className="w-full p-2 border border-gray-300 rounded text-gray-900"
+                  className={UI.inputCompact}
                   value={correctionDate}
                   onChange={(e) => setCorrectionDate(e.target.value)}
                 />
                 <input
                   type="time"
                   required
-                  className="w-full p-2 border border-gray-300 rounded text-gray-900"
+                  className={UI.inputCompact}
                   value={correctionTime}
                   onChange={(e) => setCorrectionTime(e.target.value)}
                 />
               </div>
               <textarea
                 required
-                className="w-full p-2 border border-gray-300 rounded text-gray-900"
+                className={UI.inputCompact}
                 rows={3}
                 placeholder="Motivo…"
                 value={correctionReason}
@@ -1168,6 +1179,9 @@ const AdminAttendanceReport = ({ users }) => {
   return (
     <div className={`${UI.card} p-6 report-container`}>
       <style>{`
+        :root { color-scheme: light; }
+        input, select, textarea { color-scheme: light; }
+
         @media print {
           .no-print { display: none !important; }
           .print-only { display: block !important; }
@@ -1187,29 +1201,29 @@ const AdminAttendanceReport = ({ users }) => {
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
-          <select value={mode} onChange={(e) => setMode(e.target.value)} className="border border-gray-300 rounded px-3 py-2 text-gray-900">
+          <select value={mode} onChange={(e) => setMode(e.target.value)} className={UI.inputCompact}>
             <option value="week">Semanal</option>
             <option value="month">Mensual</option>
             <option value="year">Anual</option>
           </select>
 
           {mode === "week" && (
-            <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} className="border border-gray-300 rounded px-3 py-2 text-gray-900" />
+            <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} className={UI.inputCompact} />
           )}
 
           {mode === "month" && (
-            <input type="month" value={monthValue} onChange={(e) => setMonthValue(e.target.value)} className="border border-gray-300 rounded px-3 py-2 text-gray-900" />
+            <input type="month" value={monthValue} onChange={(e) => setMonthValue(e.target.value)} className={UI.inputCompact} />
           )}
 
           {mode === "year" && (
-            <input type="number" min="2000" max="2100" value={yearValue} onChange={(e) => setYearValue(e.target.value)} className="border border-gray-300 rounded px-3 py-2 text-gray-900 w-28" />
+            <input type="number" min="2000" max="2100" value={yearValue} onChange={(e) => setYearValue(e.target.value)} className={`${UI.inputCompact} w-28`} />
           )}
 
-          <button onClick={runReport} className="bg-blue-900 hover:bg-blue-800 text-white font-bold px-4 py-2 rounded">
+          <button onClick={runReport} className={UI.buttonPrimary}>
             Generar
           </button>
 
-          <button onClick={printReport} className="border border-gray-300 hover:bg-gray-50 text-gray-900 font-bold px-4 py-2 rounded inline-flex items-center gap-2">
+          <button onClick={printReport} className={`${UI.buttonOutline} inline-flex items-center gap-2`}>
             <Printer size={16} /> Imprimir
           </button>
         </div>
@@ -1224,16 +1238,16 @@ const AdminAttendanceReport = ({ users }) => {
         <div className="py-10 text-center text-gray-900">Generando informe…</div>
       ) : (
         <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm border border-gray-200">
+          <table className="min-w-full text-sm border border-slate-200 bg-white text-slate-900 rounded-2xl overflow-hidden">
             <thead className={UI.tableHead}>
               <tr>
-                <th className="px-4 py-3 text-left border-b border-gray-200">Usuario</th>
+                <th className="px-4 py-3 text-left border-b border-slate-200 text-slate-700 font-semibold">Usuario</th>
                 {tableDays.map((d) => (
-                  <th key={d} className="px-3 py-3 text-center border-b border-gray-200 whitespace-nowrap">
+                  <th key={d} className="px-3 py-3 text-center border-b border-slate-200 whitespace-nowrap text-slate-700 font-semibold">
                     {d.slice(8, 10)}/{d.slice(5, 7)}
                   </th>
                 ))}
-                <th className="px-4 py-3 text-center border-b border-gray-200">Total</th>
+                <th className="px-4 py-3 text-center border-b border-slate-200 text-slate-700 font-semibold">Total</th>
               </tr>
             </thead>
             <tbody>
