@@ -3,10 +3,10 @@ import React, { useState, useEffect, useRef } from 'react';
 // =============================================================================
 //  🔴 INSTRUCCIONES: EN TU PC, DESCOMENTA LAS SIGUIENTES 2 LÍNEAS:
 // =============================================================================
-import logoImg from './logo.png'; 
-import { auth, db } from './firebaseConfig';
+// import logoImg from './logo.png'; 
+// import { auth, db } from './firebaseConfig';
 
-/* --- BLOQUE TEMPORAL PARA EVITAR ERRORES EN ESTE CHAT (BÓRRALO EN TU PC) --- 
+/* --- BLOQUE TEMPORAL PARA EVITAR ERRORES EN ESTE CHAT (BÓRRALO EN TU PC) --- */
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
@@ -15,7 +15,7 @@ const logoImg = "https://via.placeholder.com/150"; // Marcador de posición
 const appDummy = initializeApp({apiKey: "dummy", projectId: "dummy"}); 
 const auth = getAuth(appDummy);
 const db = getFirestore(appDummy);
--------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
 
 import { 
   onAuthStateChanged,
@@ -51,11 +51,12 @@ import {
   Eye,
   EyeOff,
   Printer,
-  FileBarChart
+  FileBarChart,
+  Lock
 } from 'lucide-react';
 
 // --- Constantes ---
-const ADMIN_SECRET = "1234";
+const ADMIN_SECRET = "ADMIN123";
 const COLLECTION_USERS = 'users'; 
 const COLLECTION_LOGS = 'logs';
 const COLLECTION_REQUESTS = 'requests';
@@ -64,7 +65,7 @@ const COLLECTION_REQUESTS = 'requests';
 
 const Logo = () => (
   <div className="flex items-center justify-center mb-6">
-    <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-lg border-4 border-blue-900 overflow-hidden">
+    <div className="w-28 h-28 bg-white rounded-full flex items-center justify-center shadow-lg border-4 border-blue-900 overflow-hidden relative z-10">
       <img 
         src={logoImg} 
         alt="Logo Club" 
@@ -75,7 +76,7 @@ const Logo = () => (
           if(icon) icon.style.opacity = 1;
         }} 
       />
-      <Briefcase className="w-10 h-10 text-blue-900 absolute opacity-0 transition-opacity duration-300" style={{opacity: 0}} />
+      <Briefcase className="w-12 h-12 text-blue-900 absolute opacity-0 transition-opacity duration-300" style={{opacity: 0}} />
     </div>
   </div>
 );
@@ -89,6 +90,7 @@ const Loading = () => (
 // --- Pantalla de Autenticación Unificada ---
 const AuthScreen = ({ onCompleteProfile, currentUser }) => {
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+  const [isAdminMode, setIsAdminMode] = useState(false); // Nuevo estado para modo visual admin
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -156,19 +158,29 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
   // Si NO hay usuario autenticado (ni por Google ni por Email)
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+      <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 ${isAdminMode ? 'bg-slate-800' : 'bg-gray-100'}`}>
+        <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md relative overflow-hidden">
+          {/* Header Visual según modo */}
+          <div className={`absolute top-0 left-0 w-full h-2 ${isAdminMode ? 'bg-red-600' : 'bg-blue-900'}`}></div>
+          
           <Logo />
           
+          <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
+            {isAdminMode ? 'Portal Administrativo' : 'Control de Acceso'}
+          </h2>
+          <p className="text-center text-gray-500 mb-6 text-sm">
+            {isAdminMode ? 'Ingresa tus credenciales de administrador' : 'Bienvenido al sistema del Club'}
+          </p>
+
           <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
             <button 
-              className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'login' ? 'bg-white text-blue-900 shadow' : 'text-gray-500'}`}
+              className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'login' ? 'bg-white text-gray-800 shadow' : 'text-gray-500'}`}
               onClick={() => {setAuthMode('login'); setError('');}}
             >
               Iniciar Sesión
             </button>
             <button 
-              className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'register' ? 'bg-white text-blue-900 shadow' : 'text-gray-500'}`}
+              className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'register' ? 'bg-white text-gray-800 shadow' : 'text-gray-500'}`}
               onClick={() => {setAuthMode('register'); setError('');}}
             >
               Registrarse
@@ -183,8 +195,8 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="nombre@ejemplo.com"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                placeholder="usuario@club.com"
               />
             </div>
             
@@ -196,13 +208,14 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none pr-10"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 z-10 focus:outline-none"
+                  tabIndex="-1"
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -210,14 +223,14 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
             </div>
 
             {error && (
-              <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-center gap-2">
+              <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-center gap-2 border border-red-100">
                 <AlertCircle size={16} /> {error}
               </div>
             )}
 
             <button
               type="submit"
-              className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+              className={`w-full text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 ${isAdminMode ? 'bg-red-700' : 'bg-blue-900'}`}
             >
               {authMode === 'login' ? 'Entrar' : 'Crear Cuenta'} <LogIn size={20} />
             </button>
@@ -235,6 +248,20 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
               className="w-full mt-4 bg-white border border-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-all hover:bg-gray-50 shadow-sm flex items-center justify-center gap-2"
             >
               <Chrome size={20} className="text-red-500" /> Google
+            </button>
+          </div>
+
+          {/* Botón de cambio a modo Admin */}
+          <div className="mt-8 text-center">
+            <button 
+              onClick={() => setIsAdminMode(!isAdminMode)}
+              className="inline-flex items-center gap-2 text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              {isAdminMode ? (
+                <>Volver a acceso empleados</>
+              ) : (
+                <><Lock size={14} /> Acceso Administrador</>
+              )}
             </button>
           </div>
         </div>
@@ -374,7 +401,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     try {
       await addDoc(collection(db, COLLECTION_LOGS), {
         userId: userDocId,
-        userName: user.name,
+        userName: user.name || 'Usuario', // Fallback por si no hay nombre
         type: type,
         timestamp: serverTimestamp(),
         dateString: new Date().toLocaleDateString()
@@ -390,7 +417,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     try {
       await addDoc(collection(db, COLLECTION_REQUESTS), {
         userId: userDocId,
-        userName: user.name,
+        userName: user.name || 'Usuario',
         date: correctionDate,
         time: correctionTime,
         reason: correctionReason,
@@ -419,7 +446,8 @@ const EmployeeDashboard = ({ user, userDocId }) => {
   return (
     <div className="min-h-screen bg-gray-100 pb-12">
       <header className="bg-blue-900 text-white p-4 shadow-md">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
+        {/* Container ampliado para PC: max-w-7xl */}
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center overflow-hidden">
                <img src={logoImg} className="w-full h-full object-cover" />
@@ -435,25 +463,26 @@ const EmployeeDashboard = ({ user, userDocId }) => {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-4 space-y-6">
+      {/* Main Container ampliado */}
+      <main className="max-w-7xl mx-auto p-4 space-y-6">
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
             <Clock className="text-blue-600" /> Control de Acceso
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button onClick={() => handleClockAction('in')} disabled={status === 'in' || status === 'break'} className={`p-6 rounded-xl flex flex-col items-center gap-3 transition-all ${status === 'out' ? 'bg-green-100 text-green-800 border-2 border-green-500' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
-              <LogIn size={32} /> <span className="font-bold text-lg">Entrada</span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <button onClick={() => handleClockAction('in')} disabled={status === 'in' || status === 'break'} className={`p-8 rounded-xl flex flex-col items-center gap-3 transition-all ${status === 'out' ? 'bg-green-100 text-green-800 border-2 border-green-500 shadow-md hover:scale-105' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
+              <LogIn size={40} /> <span className="font-bold text-xl">Entrada</span>
             </button>
-            <button onClick={() => handleClockAction('break_start')} disabled={status !== 'in'} className={`p-6 rounded-xl flex flex-col items-center gap-3 transition-all ${status === 'in' ? 'bg-yellow-100 text-yellow-800 border-2 border-yellow-500' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
-              <Coffee size={32} /> <span className="font-bold text-lg">Pausa</span>
+            <button onClick={() => handleClockAction('break_start')} disabled={status !== 'in'} className={`p-8 rounded-xl flex flex-col items-center gap-3 transition-all ${status === 'in' ? 'bg-yellow-100 text-yellow-800 border-2 border-yellow-500 shadow-md hover:scale-105' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
+              <Coffee size={40} /> <span className="font-bold text-xl">Pausa</span>
             </button>
-            <button onClick={() => handleClockAction(status === 'break' ? 'in' : 'out')} disabled={status === 'out'} className={`p-6 rounded-xl flex flex-col items-center gap-3 transition-all ${status !== 'out' ? 'bg-red-100 text-red-800 border-2 border-red-500' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
-              <LogOut size={32} /> <span className="font-bold text-lg">{status === 'break' ? 'Volver' : 'Salida'}</span>
+            <button onClick={() => handleClockAction(status === 'break' ? 'in' : 'out')} disabled={status === 'out'} className={`p-8 rounded-xl flex flex-col items-center gap-3 transition-all ${status !== 'out' ? 'bg-red-100 text-red-800 border-2 border-red-500 shadow-md hover:scale-105' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
+              <LogOut size={40} /> <span className="font-bold text-xl">{status === 'break' ? 'Volver' : 'Salida'}</span>
             </button>
           </div>
-          <div className="mt-6 text-center">
-            <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${status === 'in' ? 'bg-green-100 text-green-700' : status === 'break' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>
-              Estado: {status === 'in' ? 'Trabajando' : status === 'break' ? 'En Pausa' : 'Fuera'}
+          <div className="mt-8 text-center">
+            <span className={`inline-flex items-center gap-2 px-6 py-2 rounded-full text-base font-medium ${status === 'in' ? 'bg-green-100 text-green-700' : status === 'break' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>
+              Estado actual: {status === 'in' ? 'TRABAJANDO' : status === 'break' ? 'EN PAUSA' : 'FUERA DE TURNO'}
             </span>
           </div>
         </div>
@@ -481,32 +510,33 @@ const EmployeeDashboard = ({ user, userDocId }) => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow p-5">
+        {/* Grid de historial ajustado para pantallas grandes */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-xl shadow p-6 h-96 flex flex-col">
              <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} /> Últimos Registros</h3>
-             <div className="space-y-2 max-h-60 overflow-y-auto">
+             <div className="space-y-2 flex-1 overflow-y-auto pr-2">
                {logs.map(log => (
-                 <div key={log.id} className="flex justify-between p-2 bg-gray-50 rounded text-xs">
-                   <span className={log.type==='in'?'text-green-600':log.type==='out'?'text-red-600':'text-yellow-600'}>
+                 <div key={log.id} className="flex justify-between p-3 bg-gray-50 rounded text-sm hover:bg-gray-100 transition-colors">
+                   <span className={`font-medium ${log.type==='in'?'text-green-600':log.type==='out'?'text-red-600':'text-yellow-600'}`}>
                      {log.type === 'in' ? 'Entrada' : log.type === 'out' ? 'Salida' : 'Pausa'}
                    </span>
-                   <span>{log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '...'}</span>
+                   <span className="text-gray-500">{log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '...'}</span>
                  </div>
                ))}
              </div>
           </div>
-          <div className="bg-white rounded-xl shadow p-5">
+          <div className="bg-white rounded-xl shadow p-6 h-96 flex flex-col">
              <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><FileText size={18} /> Mis Solicitudes</h3>
-             <div className="space-y-2 max-h-60 overflow-y-auto">
+             <div className="space-y-2 flex-1 overflow-y-auto pr-2">
                {myRequests.map(req => (
-                 <div key={req.id} className="p-2 border rounded bg-gray-50 text-xs">
-                    <div className="flex justify-between font-bold">
+                 <div key={req.id} className="p-3 border rounded bg-gray-50 text-sm hover:bg-gray-100 transition-colors">
+                    <div className="flex justify-between font-bold mb-1">
                       <span>{req.date} {req.time}</span>
-                      <span className={req.status==='approved'?'text-green-600':req.status==='rejected'?'text-red-600':'text-yellow-600'}>
+                      <span className={`px-2 py-0.5 rounded text-xs ${req.status==='approved'?'bg-green-100 text-green-700':req.status==='rejected'?'bg-red-100 text-red-700':'bg-yellow-100 text-yellow-700'}`}>
                         {req.status === 'approved' ? 'Aprobada' : req.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
                       </span>
                     </div>
-                    <div className="truncate text-gray-500">{req.reason}</div>
+                    <div className="text-gray-600 italic">"{req.reason}"</div>
                  </div>
                ))}
              </div>
@@ -591,7 +621,8 @@ const AdminDashboard = ({ user }) => {
       `}</style>
 
       <header className="bg-indigo-900 text-white shadow-lg no-print">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+        {/* Container ampliado max-w-7xl */}
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <ShieldAlert size={28} />
             <h1 className="text-xl font-bold">Portal Administración</h1>
@@ -605,7 +636,8 @@ const AdminDashboard = ({ user }) => {
         </div>
       </header>
 
-      <div className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Grid ampliado max-w-7xl */}
+      <div className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
         <nav className="space-y-2 no-print">
           <button onClick={() => setActiveTab('users')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'users' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
             <Users size={18} /> Usuarios {allUsers.filter(u => u.status === 'pending').length > 0 && <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{allUsers.filter(u => u.status === 'pending').length}</span>}
@@ -670,7 +702,7 @@ const AdminDashboard = ({ user }) => {
                     <tbody>
                       {allLogs.map(log => (
                         <tr key={log.id} className="border-b hover:bg-gray-50">
-                          <td className="px-6 py-4">{log.userName}</td>
+                          <td className="px-6 py-4">{log.userName || 'Desconocido'}</td>
                           <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold ${log.type==='in'?'bg-green-100 text-green-700':log.type==='out'?'bg-red-100 text-red-700':'bg-yellow-100'}`}>{log.type}</span></td>
                           <td className="px-6 py-4 text-gray-500">{log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '...'}</td>
                         </tr>
@@ -727,7 +759,7 @@ const AdminDashboard = ({ user }) => {
                     ) : (
                       getFilteredLogs().map(log => (
                         <tr key={log.id} className="border-b hover:bg-gray-50">
-                          <td className="px-4 py-3 font-medium">{log.userName}</td>
+                          <td className="px-4 py-3 font-medium">{log.userName || 'Usuario'}</td>
                           <td className="px-4 py-3">
                              {log.type === 'in' ? 'ENTRADA' : log.type === 'out' ? 'SALIDA' : 'PAUSA'}
                           </td>
