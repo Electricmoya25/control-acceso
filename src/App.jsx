@@ -3,19 +3,18 @@ import React, { useState, useEffect, useRef } from 'react';
 // =============================================================================
 //  🔴 INSTRUCCIONES: EN TU PC, DESCOMENTA LAS SIGUIENTES 2 LÍNEAS:
 // =============================================================================
-// import logoImg from './logo.png'; 
-// import { auth, db } from './firebaseConfig';
+import logoImg from './logo.png'; 
+import { auth, db } from './firebaseConfig';
 
-/* --- BLOQUE TEMPORAL PARA EVITAR ERRORES EN ESTE CHAT (BÓRRALO EN TU PC) --- */
+/* --- BLOQUE TEMPORAL PARA EVITAR ERRORES EN ESTE CHAT (BÓRRALO EN TU PC) --- 
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-const logoImg = "https://via.placeholder.com/150"; // Marcador de posición
-// Inicialización dummy para que compile aquí
+const logoImg = "https://via.placeholder.com/150"; 
 const appDummy = initializeApp({apiKey: "dummy", projectId: "dummy"}); 
 const auth = getAuth(appDummy);
 const db = getFirestore(appDummy);
-/* -------------------------------------------------------------------------- */
+-------------------------------------------------------------------------- */
 
 import { 
   onAuthStateChanged,
@@ -33,6 +32,7 @@ import {
   doc, 
   updateDoc, 
   setDoc,
+  getDoc, // Añadido getDoc
   serverTimestamp
 } from 'firebase/firestore';
 import { 
@@ -52,14 +52,20 @@ import {
   EyeOff,
   Printer,
   FileBarChart,
-  Lock
+  Lock,
+  Settings, // Nuevo icono
+  RefreshCcw, // Nuevo icono
+  Key // Nuevo icono
 } from 'lucide-react';
 
 // --- Constantes ---
-const ADMIN_SECRET = "ADMIN123";
+const DEFAULT_ADMIN_CODE = "123456"; // Contraseña original
+const MASTER_EMAIL = "master@master.es"; // Usuario Maestro
+
 const COLLECTION_USERS = 'users'; 
 const COLLECTION_LOGS = 'logs';
 const COLLECTION_REQUESTS = 'requests';
+const COLLECTION_SETTINGS = 'settings'; // Nueva colección para guardar config
 
 // --- Componentes Auxiliares ---
 
@@ -89,8 +95,8 @@ const Loading = () => (
 
 // --- Pantalla de Autenticación Unificada ---
 const AuthScreen = ({ onCompleteProfile, currentUser }) => {
-  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
-  const [isAdminMode, setIsAdminMode] = useState(false); // Nuevo estado para modo visual admin
+  const [authMode, setAuthMode] = useState('login'); 
+  const [isAdminMode, setIsAdminMode] = useState(false); 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -147,20 +153,44 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
       return;
     }
 
-    if (role === 'admin' && adminCode !== ADMIN_SECRET) {
-      setError('Código de administrador incorrecto.');
-      return;
+    if (role === 'admin') {
+      // Si es el usuario maestro, pase VIP
+      if (currentUser?.email === MASTER_EMAIL) {
+         // Maestro pasa sin verificar código
+      } else {
+        // Verificar código de admin contra la base de datos
+        try {
+          const settingsRef = doc(db, COLLECTION_SETTINGS, 'admin_config');
+          const settingsSnap = await getDoc(settingsRef);
+          
+          let currentAdminCode = DEFAULT_ADMIN_CODE;
+          if (settingsSnap.exists() && settingsSnap.data().code) {
+            currentAdminCode = settingsSnap.data().code;
+          }
+
+          if (adminCode !== currentAdminCode) {
+            setError('Código de administrador incorrecto.');
+            return;
+          }
+        } catch (err) {
+          console.error("Error verificando código admin:", err);
+          // Si falla la lectura (ej. permisos o red), fallback al default si no existe config
+          if (adminCode !== DEFAULT_ADMIN_CODE) {
+             setError('Error de verificación. Intenta con el código por defecto o contacta soporte.');
+             return;
+          }
+        }
+      }
     }
 
     onCompleteProfile({ name, role, status: role === 'admin' ? 'active' : 'pending' });
   };
 
-  // Si NO hay usuario autenticado (ni por Google ni por Email)
+  // Si NO hay usuario autenticado
   if (!currentUser) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 ${isAdminMode ? 'bg-slate-800' : 'bg-gray-100'}`}>
-        <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md relative overflow-hidden">
-          {/* Header Visual según modo */}
+        <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-lg relative overflow-hidden">
           <div className={`absolute top-0 left-0 w-full h-2 ${isAdminMode ? 'bg-red-600' : 'bg-blue-900'}`}></div>
           
           <Logo />
@@ -251,7 +281,6 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
             </button>
           </div>
 
-          {/* Botón de cambio a modo Admin */}
           <div className="mt-8 text-center">
             <button 
               onClick={() => setIsAdminMode(!isAdminMode)}
@@ -269,10 +298,10 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
     );
   }
 
-  // Si hay usuario pero falta completar perfil (nombre/rol)
+  // Si hay usuario pero falta completar perfil
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg">
         <Logo />
         <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">Completar Perfil</h2>
         <p className="text-center text-gray-500 mb-6">Hola, necesitamos unos datos más.</p>
@@ -319,13 +348,16 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
 
           {role === 'admin' && (
             <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-              <label className="block text-sm font-medium text-purple-700 mb-1">Código de Administrador</label>
+              <label className="block text-sm font-medium text-purple-700 mb-1">
+                {currentUser?.email === MASTER_EMAIL ? 'Código de Administrador (Omitido para Master)' : 'Código de Administrador'}
+              </label>
               <input
                 type="password"
                 value={adminCode}
                 onChange={(e) => setAdminCode(e.target.value)}
                 className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none bg-purple-50"
-                placeholder="Ingresa el código secreto"
+                placeholder={currentUser?.email === MASTER_EMAIL ? "Pase Maestro Activo" : "Ingresa el código secreto"}
+                disabled={currentUser?.email === MASTER_EMAIL}
               />
             </div>
           )}
@@ -357,7 +389,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
   );
 };
 
-// --- Panel de Empleado ---
+// --- Panel de Empleado (Sin cambios lógicos, solo visual) ---
 const EmployeeDashboard = ({ user, userDocId }) => {
   const [status, setStatus] = useState('out');
   const [logs, setLogs] = useState([]);
@@ -401,7 +433,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     try {
       await addDoc(collection(db, COLLECTION_LOGS), {
         userId: userDocId,
-        userName: user.name || 'Usuario', // Fallback por si no hay nombre
+        userName: user.name || 'Usuario',
         type: type,
         timestamp: serverTimestamp(),
         dateString: new Date().toLocaleDateString()
@@ -445,9 +477,8 @@ const EmployeeDashboard = ({ user, userDocId }) => {
 
   return (
     <div className="min-h-screen bg-gray-100 pb-12">
-      <header className="bg-blue-900 text-white p-4 shadow-md">
-        {/* Container ampliado para PC: max-w-7xl */}
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
+      <header className="bg-blue-900 text-white p-4 shadow-md w-full">
+        <div className="w-full px-4 md:px-8 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center overflow-hidden">
                <img src={logoImg} className="w-full h-full object-cover" />
@@ -463,9 +494,8 @@ const EmployeeDashboard = ({ user, userDocId }) => {
         </div>
       </header>
 
-      {/* Main Container ampliado */}
-      <main className="max-w-7xl mx-auto p-4 space-y-6">
-        <div className="bg-white rounded-2xl shadow-lg p-6">
+      <main className="w-full px-4 md:px-8 py-6 space-y-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6 w-full">
           <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
             <Clock className="text-blue-600" /> Control de Acceso
           </h2>
@@ -510,8 +540,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
           </div>
         )}
 
-        {/* Grid de historial ajustado para pantallas grandes */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
           <div className="bg-white rounded-xl shadow p-6 h-96 flex flex-col">
              <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} /> Últimos Registros</h3>
              <div className="space-y-2 flex-1 overflow-y-auto pr-2">
@@ -554,6 +583,10 @@ const AdminDashboard = ({ user }) => {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [allLogs, setAllLogs] = useState([]);
   const [reportFilter, setReportFilter] = useState('week');
+  
+  // Estados para configuración de admin
+  const [newAdminCode, setNewAdminCode] = useState('');
+  const [configMessage, setConfigMessage] = useState('');
 
   useEffect(() => {
     const q = collection(db, COLLECTION_USERS);
@@ -579,6 +612,41 @@ const AdminDashboard = ({ user }) => {
 
   const handleRequest = async (reqId, status) => {
     await updateDoc(doc(db, COLLECTION_REQUESTS, reqId), { status });
+  };
+
+  const handleChangeAdminCode = async (e) => {
+    e.preventDefault();
+    if (newAdminCode.length < 4) {
+      setConfigMessage("Error: La contraseña debe tener al menos 4 caracteres.");
+      return;
+    }
+    try {
+      await setDoc(doc(db, COLLECTION_SETTINGS, 'admin_config'), {
+        code: newAdminCode,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.email
+      });
+      setConfigMessage("¡Contraseña de administrador actualizada correctamente!");
+      setNewAdminCode('');
+    } catch (err) {
+      console.error(err);
+      setConfigMessage("Error al actualizar la contraseña.");
+    }
+  };
+
+  const handleResetAdminCode = async () => {
+    if (!window.confirm("¿Estás seguro de que quieres restaurar la contraseña original (123456)?")) return;
+    try {
+      await setDoc(doc(db, COLLECTION_SETTINGS, 'admin_config'), {
+        code: DEFAULT_ADMIN_CODE,
+        updatedAt: serverTimestamp(),
+        updatedBy: 'MASTER RESET'
+      });
+      setConfigMessage("¡Contraseña restaurada a la original!");
+    } catch (err) {
+      console.error(err);
+      setConfigMessage("Error al restaurar.");
+    }
   };
 
   const getFilteredLogs = () => {
@@ -621,8 +689,7 @@ const AdminDashboard = ({ user }) => {
       `}</style>
 
       <header className="bg-indigo-900 text-white shadow-lg no-print">
-        {/* Container ampliado max-w-7xl */}
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+        <div className="w-full px-4 md:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <ShieldAlert size={28} />
             <h1 className="text-xl font-bold">Portal Administración</h1>
@@ -636,9 +703,8 @@ const AdminDashboard = ({ user }) => {
         </div>
       </header>
 
-      {/* Grid ampliado max-w-7xl */}
-      <div className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
-        <nav className="space-y-2 no-print">
+      <div className="flex-1 w-full px-4 md:px-8 py-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+        <nav className="space-y-2 no-print h-fit sticky top-6">
           <button onClick={() => setActiveTab('users')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'users' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
             <Users size={18} /> Usuarios {allUsers.filter(u => u.status === 'pending').length > 0 && <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{allUsers.filter(u => u.status === 'pending').length}</span>}
           </button>
@@ -650,6 +716,9 @@ const AdminDashboard = ({ user }) => {
           </button>
           <button onClick={() => setActiveTab('reports')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'reports' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
             <FileBarChart size={18} /> Informes
+          </button>
+          <button onClick={() => setActiveTab('settings')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'settings' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
+            <Settings size={18} /> Configuración
           </button>
         </nav>
 
@@ -772,6 +841,59 @@ const AdminDashboard = ({ user }) => {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="max-w-xl mx-auto space-y-6">
+              <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-indigo-500">
+                <h3 className="font-bold text-gray-700 text-lg flex items-center gap-2 mb-4">
+                  <Key className="text-indigo-600" /> Cambiar Contraseña de Administrador
+                </h3>
+                <p className="text-sm text-gray-500 mb-6">
+                  Esta es la contraseña que los nuevos usuarios deberán introducir para registrarse como administradores.
+                </p>
+                
+                <form onSubmit={handleChangeAdminCode} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nueva Contraseña</label>
+                    <input 
+                      type="text" 
+                      value={newAdminCode}
+                      onChange={(e) => setNewAdminCode(e.target.value)}
+                      placeholder="Escribe la nueva clave..."
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+                    Actualizar Contraseña
+                  </button>
+                </form>
+
+                {configMessage && (
+                  <div className="mt-4 p-3 bg-green-50 text-green-700 text-sm rounded border border-green-200 text-center">
+                    {configMessage}
+                  </div>
+                )}
+              </div>
+
+              {/* Panel de Maestro: Solo visible para master@master.es */}
+              {user.email === MASTER_EMAIL && (
+                <div className="bg-red-50 rounded-xl shadow-md p-6 border border-red-200">
+                  <h3 className="font-bold text-red-800 text-lg flex items-center gap-2 mb-4">
+                    <ShieldAlert /> Zona Maestra
+                  </h3>
+                  <p className="text-sm text-red-600 mb-4">
+                    Como usuario maestro, puedes restaurar la contraseña original en caso de emergencia.
+                  </p>
+                  <button 
+                    onClick={handleResetAdminCode}
+                    className="w-full bg-white border-2 border-red-600 text-red-600 font-bold py-2 rounded-lg hover:bg-red-600 hover:text-white transition-colors flex items-center justify-center gap-2"
+                  >
+                    <RefreshCcw size={18} /> Restaurar Contraseña Original (123456)
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </main>
