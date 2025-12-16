@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // =============================================================================
-//  🔴 INSTRUCCIONES: EN TU PC, DESCOMENTA LAS SIGUIENTES 2 LÍNEAS:
+//  馃敶 INSTRUCCIONES: EN TU PC, DESCOMENTA LAS SIGUIENTES 2 L脥NEAS:
 // =============================================================================
-// import logoImg from './logo.png'; 
-// import { auth, db } from './firebaseConfig';
+ import logoImg from './logo.png'; 
+ import { auth, db } from './firebaseConfig';
 
-/* --- BLOQUE TEMPORAL PARA EVITAR ERRORES EN ESTE CHAT (BÓRRALO EN TU PC) --- */
+/* --- BLOQUE TEMPORAL PARA EVITAR ERRORES EN ESTE CHAT (B脫RRALO EN TU PC) --- 
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
@@ -14,7 +14,7 @@ const logoImg = "https://via.placeholder.com/150";
 const appDummy = initializeApp({apiKey: "dummy", projectId: "dummy"}); 
 const auth = getAuth(appDummy);
 const db = getFirestore(appDummy);
-/* -------------------------------------------------------------------------- */
+-------------------------------------------------------------------------- */
 
 import { 
   onAuthStateChanged,
@@ -22,7 +22,7 @@ import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  sendPasswordResetEmail, // Importado para resetear contraseña
+  sendPasswordResetEmail, // Importado para resetear contrase帽a
   signOut
 } from 'firebase/auth';
 import { 
@@ -66,11 +66,31 @@ import {
 const DEFAULT_ADMIN_CODE = "123456"; 
 const MASTER_EMAIL = "master@master.es"; 
 
+// --- Localizaci贸n (espa帽ol) ---
+const ES_LOCALE = 'es-ES';
+
+const formatDateTimeES = (ts) => {
+  if (!ts?.seconds) return '...';
+  return new Date(ts.seconds * 1000).toLocaleString(ES_LOCALE, { hour12: false });
+};
+
+const formatDateES = (date = new Date()) => date.toLocaleDateString(ES_LOCALE);
+
+const LOG_TYPE_LABEL = {
+  in: 'Entrada',
+  out: 'Salida',
+  break_start: 'Pausa',
+  break_end: 'Fin de pausa'
+};
+
+const logTypeToLabel = (type) => LOG_TYPE_LABEL[type] || type;
+
+
 const COLLECTION_USERS = 'users'; 
 const COLLECTION_LOGS = 'logs';
 const COLLECTION_REQUESTS = 'requests';
 const COLLECTION_SETTINGS = 'settings'; 
-const COLLECTION_ADMIN_INVITES = 'admin_invites'; // Nueva colección para pre-altas
+const COLLECTION_ADMIN_INVITES = 'admin_invites'; // Nueva colecci贸n para pre-altas
 
 // --- Componentes Auxiliares ---
 
@@ -93,12 +113,12 @@ const Logo = () => (
 );
 
 const Loading = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+  <div className="min-h-[100dvh] flex items-center justify-center bg-gray-50">
     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-900"></div>
   </div>
 );
 
-// --- Pantalla de Autenticación Unificada ---
+// --- Pantalla de Autenticaci贸n Unificada ---
 const AuthScreen = ({ onCompleteProfile, currentUser }) => {
   const [authMode, setAuthMode] = useState('login'); 
   const [isAdminMode, setIsAdminMode] = useState(false); 
@@ -118,20 +138,20 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
     }
   }, [currentUser]);
 
-  // Función para resetear contraseña
+  // Funci贸n para resetear contrase帽a
   const handleForgotPassword = async () => {
     if (!email) {
-      setError("Por favor, escribe tu correo electrónico primero.");
+      setError("Por favor, escribe tu correo electr贸nico primero.");
       return;
     }
     try {
       await sendPasswordResetEmail(auth, email);
-      setResetMessage(`Se ha enviado un correo a ${email} para restablecer tu contraseña.`);
+      setResetMessage(`Se ha enviado un correo a ${email} para restablecer tu contrase帽a.`);
       setError('');
     } catch (err) {
       console.error(err);
       if (err.code === 'auth/user-not-found') setError("No existe ninguna cuenta con este correo.");
-      else setError("Error al enviar el correo. Verifica que el email sea válido.");
+      else setError("Error al enviar el correo. Verifica que el email sea v谩lido.");
     }
   };
 
@@ -162,9 +182,9 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
     } catch (err) {
       console.error(err);
       if (err.code === 'auth/invalid-credential') setError("Credenciales incorrectas.");
-      else if (err.code === 'auth/email-already-in-use') setError("El correo ya está registrado.");
-      else if (err.code === 'auth/weak-password') setError("La contraseña debe tener al menos 6 caracteres.");
-      else setError("Ocurrió un error. Intenta de nuevo.");
+      else if (err.code === 'auth/email-already-in-use') setError("El correo ya est谩 registrado.");
+      else if (err.code === 'auth/weak-password') setError("La contrase帽a debe tener al menos 6 caracteres.");
+      else setError("Ocurri贸 un error. Intenta de nuevo.");
     }
   };
 
@@ -177,7 +197,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
       return;
     }
 
-    // Verificar si el usuario está pre-autorizado como admin (Invitación)
+    // Verificar si el usuario est谩 pre-autorizado como admin (Invitaci贸n)
     let finalRole = role;
     let finalStatus = role === 'admin' ? 'pending' : 'pending'; // Por defecto pendiente
 
@@ -186,17 +206,17 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
       if (currentUser?.email === MASTER_EMAIL) {
          finalStatus = 'active'; // Master es siempre activo
       } else {
-        // Verificar código
+        // Verificar c贸digo
         try {
-          // Primero chequeamos si está en la lista de invitados
+          // Primero chequeamos si est谩 en la lista de invitados
           const inviteRef = doc(db, COLLECTION_ADMIN_INVITES, currentUser.email);
           const inviteSnap = await getDoc(inviteRef);
 
           if (inviteSnap.exists()) {
-            // ¡Es un admin invitado! Pase directo.
+            // 隆Es un admin invitado! Pase directo.
             finalStatus = 'active';
           } else {
-            // No es invitado, verificar código manual
+            // No es invitado, verificar c贸digo manual
             const settingsRef = doc(db, COLLECTION_SETTINGS, 'admin_config');
             const settingsSnap = await getDoc(settingsRef);
             let currentAdminCode = DEFAULT_ADMIN_CODE;
@@ -205,25 +225,25 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
             }
 
             if (adminCode !== currentAdminCode) {
-              setError('Código de administrador incorrecto.');
+              setError('C贸digo de administrador incorrecto.');
               return;
             }
-            finalStatus = 'active'; // Si acertó el código, es activo
+            finalStatus = 'active'; // Si acert贸 el c贸digo, es activo
           }
         } catch (err) {
           console.error("Error verificando admin:", err);
-          // Fallback básico
+          // Fallback b谩sico
           if (adminCode === DEFAULT_ADMIN_CODE) {
              finalStatus = 'active';
           } else {
-             setError('Error de verificación.');
+             setError('Error de verificaci贸n.');
              return;
           }
         }
       }
     }
 
-    // Aseguramos que se envía el nombre explícitamente
+    // Aseguramos que se env铆a el nombre expl铆citamente
     onCompleteProfile({ 
       name: name, 
       role: finalRole, 
@@ -234,7 +254,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
   // Si NO hay usuario autenticado
   if (!currentUser) {
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 ${isAdminMode ? 'bg-slate-800' : 'bg-gray-100'}`}>
+      <div className={`min-h-[100dvh] flex flex-col items-center justify-center p-4 transition-colors duration-500 ${isAdminMode ? 'bg-slate-800' : 'bg-gray-100'}`}>
         <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-lg relative overflow-hidden">
           <div className={`absolute top-0 left-0 w-full h-2 ${isAdminMode ? 'bg-red-600' : 'bg-blue-900'}`}></div>
           
@@ -252,7 +272,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
               className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'login' ? 'bg-white text-gray-800 shadow' : 'text-gray-500'}`}
               onClick={() => {setAuthMode('login'); setError(''); setResetMessage('');}}
             >
-              Iniciar Sesión
+              Iniciar Sesi贸n
             </button>
             <button 
               className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${authMode === 'register' ? 'bg-white text-gray-800 shadow' : 'text-gray-500'}`}
@@ -264,7 +284,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
 
           <form onSubmit={handleEmailAuth} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Correo Electrónico</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Correo Electr贸nico</label>
               <input
                 type="email"
                 required
@@ -276,7 +296,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contrase帽a</label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -284,7 +304,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none pr-10"
-                  placeholder="••••••••"
+                  placeholder="鈥⑩€⑩€⑩€⑩€⑩€⑩€⑩€?
                 />
                 <button
                   type="button"
@@ -295,7 +315,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
-              {/* Botón Olvidé Contraseña */}
+              {/* Bot贸n Olvid茅 Contrase帽a */}
               {authMode === 'login' && (
                 <div className="text-right mt-1">
                   <button 
@@ -303,7 +323,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
                     onClick={handleForgotPassword}
                     className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
                   >
-                    ¿Olvidaste tu contraseña?
+                    驴Olvidaste tu contrase帽a?
                   </button>
                 </div>
               )}
@@ -332,7 +352,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
           <div className="mt-6">
             <div className="relative flex py-2 items-center">
               <div className="flex-grow border-t border-gray-200"></div>
-              <span className="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase">O continúa con</span>
+              <span className="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase">O contin煤a con</span>
               <div className="flex-grow border-t border-gray-200"></div>
             </div>
             <button
@@ -363,11 +383,11 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
 
   // Si hay usuario pero falta completar perfil
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-gray-100 flex flex-col items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg">
         <Logo />
         <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">Completar Perfil</h2>
-        <p className="text-center text-gray-500 mb-6">Hola, necesitamos unos datos más.</p>
+        <p className="text-center text-gray-500 mb-6">Hola, necesitamos unos datos m谩s.</p>
 
         <form onSubmit={handleProfileSubmit} className="space-y-4">
           <div>
@@ -377,7 +397,7 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="Ej. Juan Pérez"
+              placeholder="Ej. Juan P茅rez"
             />
           </div>
 
@@ -412,19 +432,19 @@ const AuthScreen = ({ onCompleteProfile, currentUser }) => {
           {role === 'admin' && (
             <div className="animate-in fade-in slide-in-from-top-2 duration-300">
               <label className="block text-sm font-medium text-purple-700 mb-1">
-                {currentUser?.email === MASTER_EMAIL ? 'Pase Maestro (Automático)' : 'Código de Administrador'}
+                {currentUser?.email === MASTER_EMAIL ? 'Pase Maestro (Autom谩tico)' : 'C贸digo de Administrador'}
               </label>
               <input
                 type="password"
                 value={adminCode}
                 onChange={(e) => setAdminCode(e.target.value)}
                 className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none bg-purple-50"
-                placeholder={currentUser?.email === MASTER_EMAIL ? "Acceso Garantizado" : "Ingresa el código secreto"}
+                placeholder={currentUser?.email === MASTER_EMAIL ? "Acceso Garantizado" : "Ingresa el c贸digo secreto"}
                 disabled={currentUser?.email === MASTER_EMAIL}
               />
               {currentUser?.email !== MASTER_EMAIL && (
                 <p className="text-xs text-gray-500 mt-1">
-                  Si no tienes el código, pide a otro administrador que te invite.
+                  Si no tienes el c贸digo, pide a otro administrador que te invite.
                 </p>
               )}
             </div>
@@ -480,6 +500,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
         const lastLog = myLogs[0];
         if (lastLog.type === 'in') setStatus('in');
         else if (lastLog.type === 'break_start') setStatus('break');
+        else if (lastLog.type === 'break_end') setStatus('in');
         else setStatus('out');
       }
     });
@@ -504,7 +525,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
         userName: user.name || 'Usuario',
         type: type,
         timestamp: serverTimestamp(),
-        dateString: new Date().toLocaleDateString()
+        dateString: formatDateES(new Date())
       });
     } catch (e) {
       console.error(e);
@@ -534,17 +555,17 @@ const EmployeeDashboard = ({ user, userDocId }) => {
 
   if (user.status === 'pending') {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-[100dvh] bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
         <Clock className="w-16 h-16 text-yellow-500 mb-4" />
         <h2 className="text-2xl font-bold text-gray-800">Cuenta Pendiente</h2>
-        <p className="text-gray-600 mt-2 max-w-md">Tu cuenta espera aprobación del administrador.</p>
-        <button onClick={() => {signOut(auth); window.location.reload();}} className="mt-6 text-blue-600 underline text-sm">Cerrar Sesión</button>
+        <p className="text-gray-600 mt-2 max-w-md">Tu cuenta espera aprobaci贸n del administrador.</p>
+        <button onClick={() => {signOut(auth); window.location.reload();}} className="mt-6 text-blue-600 underline text-sm">Cerrar Sesi贸n</button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 pb-12">
+    <div className="min-h-[100dvh] bg-gray-100 pb-12">
       <header className="bg-blue-900 text-white p-4 shadow-md w-full">
         <div className="w-full px-4 md:px-8 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -574,7 +595,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
             <button onClick={() => handleClockAction('break_start')} disabled={status !== 'in'} className={`p-8 rounded-xl flex flex-col items-center gap-3 transition-all ${status === 'in' ? 'bg-yellow-100 text-yellow-800 border-2 border-yellow-500 shadow-md hover:scale-105' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
               <Coffee size={40} /> <span className="font-bold text-xl">Pausa</span>
             </button>
-            <button onClick={() => handleClockAction(status === 'break' ? 'in' : 'out')} disabled={status === 'out'} className={`p-8 rounded-xl flex flex-col items-center gap-3 transition-all ${status !== 'out' ? 'bg-red-100 text-red-800 border-2 border-red-500 shadow-md hover:scale-105' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
+            <button onClick={() => handleClockAction(status === 'break' ? 'break_end' : 'out')} disabled={status === 'out'} className={`p-8 rounded-xl flex flex-col items-center gap-3 transition-all ${status !== 'out' ? 'bg-red-100 text-red-800 border-2 border-red-500 shadow-md hover:scale-105' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
               <LogOut size={40} /> <span className="font-bold text-xl">{status === 'break' ? 'Volver' : 'Salida'}</span>
             </button>
           </div>
@@ -587,13 +608,13 @@ const EmployeeDashboard = ({ user, userDocId }) => {
 
         <div className="flex justify-end">
            <button onClick={() => setShowCorrection(!showCorrection)} className="text-blue-600 font-medium hover:underline text-sm flex items-center gap-1">
-             <AlertCircle size={16} /> ¿Olvidaste fichar? Solicitar corrección
+             <AlertCircle size={16} /> 驴Olvidaste fichar? Solicitar correcci贸n
            </button>
         </div>
 
         {showCorrection && (
           <div className="bg-white rounded-xl shadow-md p-6 border border-blue-100">
-            <h3 className="font-bold text-gray-800 mb-4">Solicitud de Corrección Manual</h3>
+            <h3 className="font-bold text-gray-800 mb-4">Solicitud de Correcci贸n Manual</h3>
             <form onSubmit={submitCorrection} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input type="date" required className="w-full p-2 border rounded" value={correctionDate} onChange={e=>setCorrectionDate(e.target.value)} />
@@ -610,14 +631,14 @@ const EmployeeDashboard = ({ user, userDocId }) => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
           <div className="bg-white rounded-xl shadow p-6 h-96 flex flex-col">
-             <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} /> Últimos Registros</h3>
+             <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} /> 脷ltimos Registros</h3>
              <div className="space-y-2 flex-1 overflow-y-auto pr-2">
                {logs.map(log => (
                  <div key={log.id} className="flex justify-between p-3 bg-gray-50 rounded text-sm hover:bg-gray-100 transition-colors">
                    <span className={`font-medium ${log.type==='in'?'text-green-600':log.type==='out'?'text-red-600':'text-yellow-600'}`}>
-                     {log.type === 'in' ? 'Entrada' : log.type === 'out' ? 'Salida' : 'Pausa'}
+                     {logTypeToLabel(log.type)}
                    </span>
-                   <span className="text-gray-500">{log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '...'}</span>
+                   <span className="text-gray-500">{log.timestamp ? formatDateTimeES(log.timestamp) : '...'}</span>
                  </div>
                ))}
              </div>
@@ -653,7 +674,7 @@ const AdminDashboard = ({ user }) => {
   const [reportFilter, setReportFilter] = useState('week');
   const [adminInvites, setAdminInvites] = useState([]); // Lista de invitados
   
-  // Estados para configuración
+  // Estados para configuraci贸n
   const [newAdminCode, setNewAdminCode] = useState('');
   const [configMessage, setConfigMessage] = useState('');
   const [newAdminEmail, setNewAdminEmail] = useState(''); // Para invitar
@@ -690,9 +711,9 @@ const AdminDashboard = ({ user }) => {
     await updateDoc(doc(db, COLLECTION_REQUESTS, reqId), { status });
   };
 
-  // Función para promover usuario existente a Admin
+  // Funci贸n para promover usuario existente a Admin
   const promoteToAdmin = async (userId) => {
-    if (!window.confirm("¿Estás seguro de hacer ADMIN a este usuario?")) return;
+    if (!window.confirm("驴Est谩s seguro de hacer ADMIN a este usuario?")) return;
     try {
       await updateDoc(doc(db, COLLECTION_USERS, userId), { role: 'admin', status: 'active' });
       alert("Usuario promovido a Administrador");
@@ -705,7 +726,7 @@ const AdminDashboard = ({ user }) => {
   const handleChangeAdminCode = async (e) => {
     e.preventDefault();
     if (newAdminCode.length < 4) {
-      setConfigMessage("Error: La contraseña debe tener al menos 4 caracteres.");
+      setConfigMessage("Error: La contrase帽a debe tener al menos 4 caracteres.");
       return;
     }
     try {
@@ -714,23 +735,23 @@ const AdminDashboard = ({ user }) => {
         updatedAt: serverTimestamp(),
         updatedBy: user.email
       });
-      setConfigMessage("¡Contraseña de administrador actualizada correctamente!");
+      setConfigMessage("隆Contrase帽a de administrador actualizada correctamente!");
       setNewAdminCode('');
     } catch (err) {
       console.error(err);
-      setConfigMessage("Error al actualizar la contraseña.");
+      setConfigMessage("Error al actualizar la contrase帽a.");
     }
   };
 
   const handleResetAdminCode = async () => {
-    if (!window.confirm("¿Estás seguro de restaurar la contraseña a 123456?")) return;
+    if (!window.confirm("驴Est谩s seguro de restaurar la contrase帽a a 123456?")) return;
     try {
       await setDoc(doc(db, COLLECTION_SETTINGS, 'admin_config'), {
         code: DEFAULT_ADMIN_CODE,
         updatedAt: serverTimestamp(),
         updatedBy: 'MASTER RESET'
       });
-      setConfigMessage("¡Contraseña restaurada a la original!");
+      setConfigMessage("隆Contrase帽a restaurada a la original!");
     } catch (err) {
       console.error(err);
       setConfigMessage("Error al restaurar.");
@@ -741,14 +762,14 @@ const AdminDashboard = ({ user }) => {
     e.preventDefault();
     if (!newAdminEmail.includes('@')) return;
     try {
-      // Guardar email en colección de invitados (ID = email para evitar duplicados)
+      // Guardar email en colecci贸n de invitados (ID = email para evitar duplicados)
       await setDoc(doc(db, COLLECTION_ADMIN_INVITES, newAdminEmail), {
         email: newAdminEmail,
         addedBy: user.email,
         createdAt: serverTimestamp()
       });
       setNewAdminEmail('');
-      alert("¡Administrador invitado! Cuando se registre, tendrá acceso automático.");
+      alert("隆Administrador invitado! Cuando se registre, tendr谩 acceso autom谩tico.");
     } catch (e) {
       console.error(e);
       alert("Error al invitar.");
@@ -756,7 +777,7 @@ const AdminDashboard = ({ user }) => {
   };
 
   const handleDeleteInvite = async (emailId) => {
-    if (!window.confirm("¿Eliminar invitación?")) return;
+    if (!window.confirm("驴Eliminar invitaci贸n?")) return;
     await deleteDoc(doc(db, COLLECTION_ADMIN_INVITES, emailId));
   };
 
@@ -789,7 +810,7 @@ const AdminDashboard = ({ user }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="min-h-[100dvh] bg-gray-100 flex flex-col">
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -803,7 +824,7 @@ const AdminDashboard = ({ user }) => {
         <div className="w-full px-4 md:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <ShieldAlert size={28} />
-            <h1 className="text-xl font-bold">Portal Administración</h1>
+            <h1 className="text-xl font-bold">Portal de Administraci贸n</h1>
           </div>
           <div className="flex items-center gap-4">
              <div className="text-sm bg-indigo-800 px-3 py-1 rounded-full">{user.name}</div>
@@ -814,32 +835,32 @@ const AdminDashboard = ({ user }) => {
         </div>
       </header>
 
-      <div className="flex-1 w-full px-4 md:px-8 py-6 grid grid-cols-1 md:grid-cols-4 gap-6">
-        <nav className="space-y-2 no-print h-fit sticky top-6">
-          <button onClick={() => setActiveTab('users')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'users' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
+      <div className="flex-1 w-full px-4 md:px-8 py-6 flex flex-col md:grid md:grid-cols-4 gap-6">
+        <nav className="no-print h-fit md:sticky md:top-6 md:space-y-2 flex md:block gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
+          <button onClick={() => setActiveTab('users')} className={`min-w-[180px] md:min-w-0 w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'users' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
             <Users size={18} /> Usuarios {allUsers.filter(u => u.status === 'pending').length > 0 && <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{allUsers.filter(u => u.status === 'pending').length}</span>}
           </button>
-          <button onClick={() => setActiveTab('requests')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'requests' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
+          <button onClick={() => setActiveTab('requests')} className={`min-w-[180px] md:min-w-0 w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'requests' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
             <FileText size={18} /> Solicitudes {pendingRequests.length > 0 && <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pendingRequests.length}</span>}
           </button>
-          <button onClick={() => setActiveTab('logs')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'logs' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
+          <button onClick={() => setActiveTab('logs')} className={`min-w-[180px] md:min-w-0 w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'logs' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
             <History size={18} /> Registros Globales
           </button>
-          <button onClick={() => setActiveTab('reports')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'reports' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
+          <button onClick={() => setActiveTab('reports')} className={`min-w-[180px] md:min-w-0 w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'reports' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
             <FileBarChart size={18} /> Informes
           </button>
-          <button onClick={() => setActiveTab('settings')} className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'settings' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
-            <Settings size={18} /> Configuración
+          <button onClick={() => setActiveTab('settings')} className={`min-w-[180px] md:min-w-0 w-full text-left p-3 rounded-lg flex items-center gap-3 transition-colors ${activeTab === 'settings' ? 'bg-white text-indigo-700 shadow font-medium' : 'text-gray-600 hover:bg-gray-200'}`}>
+            <Settings size={18} /> Configuraci贸n
           </button>
         </nav>
 
         <main className="md:col-span-3">
           {activeTab === 'users' && (
             <div className="bg-white rounded-xl shadow-md overflow-hidden">
-               <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">Gestión de Personal</div>
+               <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">Gesti贸n de Personal</div>
                <div className="overflow-x-auto">
                  <table className="w-full text-sm text-left">
-                   <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-6 py-3">Nombre</th><th className="px-6 py-3">Rol</th><th className="px-6 py-3">Estado</th><th className="px-6 py-3">Acción</th></tr></thead>
+                   <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-6 py-3">Nombre</th><th className="px-6 py-3">Rol</th><th className="px-6 py-3">Estado</th><th className="px-6 py-3">Acci贸n</th></tr></thead>
                    <tbody>
                      {allUsers.map(u => (
                        <tr key={u.id} className="border-b hover:bg-gray-50">
@@ -883,16 +904,16 @@ const AdminDashboard = ({ user }) => {
 
           {activeTab === 'logs' && (
              <div className="bg-white rounded-xl shadow-md overflow-hidden">
-               <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">Bitácora en Vivo</div>
+               <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">Bit谩cora en Vivo</div>
                <div className="max-h-[600px] overflow-y-auto">
                  <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0"><tr><th className="px-6 py-3">Empleado</th><th className="px-6 py-3">Acción</th><th className="px-6 py-3">Fecha</th></tr></thead>
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0"><tr><th className="px-6 py-3">Empleado</th><th className="px-6 py-3">Acci贸n</th><th className="px-6 py-3">Fecha</th></tr></thead>
                     <tbody>
                       {allLogs.map(log => (
                         <tr key={log.id} className="border-b hover:bg-gray-50">
                           <td className="px-6 py-4">{log.userName || 'Desconocido'}</td>
-                          <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold ${log.type==='in'?'bg-green-100 text-green-700':log.type==='out'?'bg-red-100 text-red-700':'bg-yellow-100'}`}>{log.type}</span></td>
-                          <td className="px-6 py-4 text-gray-500">{log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '...'}</td>
+                          <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold ${log.type==='in'?'bg-green-100 text-green-700':log.type==='out'?'bg-red-100 text-red-700':log.type==='break_start'?'bg-yellow-100 text-yellow-800':'bg-indigo-100 text-indigo-700'}`}>{logTypeToLabel(log.type)}</span></td>
+                          <td className="px-6 py-4 text-gray-500">{log.timestamp ? formatDateTimeES(log.timestamp) : '...'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -915,7 +936,7 @@ const AdminDashboard = ({ user }) => {
                   >
                     <option value="week">Esta Semana</option>
                     <option value="month">Este Mes</option>
-                    <option value="year">Este Año</option>
+                    <option value="year">Este A帽o</option>
                   </select>
                   <button 
                     onClick={printReport}
@@ -929,7 +950,7 @@ const AdminDashboard = ({ user }) => {
               <div className="hidden print-only mb-6 text-center">
                  <h1 className="text-2xl font-bold text-blue-900">Informe de Asistencia</h1>
                  <p className="text-gray-500">Periodo: {reportFilter === 'week' ? 'Semanal' : reportFilter === 'month' ? 'Mensual' : 'Anual'}</p>
-                 <p className="text-xs text-gray-400">Generado el: {new Date().toLocaleDateString()}</p>
+                 <p className="text-xs text-gray-400">Generado el: {formatDateES(new Date())}</p>
               </div>
 
               <div className="overflow-x-auto">
@@ -949,10 +970,10 @@ const AdminDashboard = ({ user }) => {
                         <tr key={log.id} className="border-b hover:bg-gray-50">
                           <td className="px-4 py-3 font-medium">{log.userName || 'Usuario'}</td>
                           <td className="px-4 py-3">
-                             {log.type === 'in' ? 'ENTRADA' : log.type === 'out' ? 'SALIDA' : 'PAUSA'}
+                             {log.type === 'in' ? 'ENTRADA' : log.type === 'out' ? 'SALIDA' : log.type === 'break_start' ? 'PAUSA' : 'FIN DE PAUSA'}
                           </td>
                           <td className="px-4 py-3 text-gray-600">
-                            {log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString() : ''}
+                            {log.timestamp ? formatDateTimeES(log.timestamp) : ''}
                           </td>
                         </tr>
                       ))
@@ -966,13 +987,13 @@ const AdminDashboard = ({ user }) => {
           {activeTab === 'settings' && (
             <div className="max-w-2xl mx-auto space-y-6">
               
-              {/* Sección 1: Crear nuevo Admin (Invitación) */}
+              {/* Secci贸n 1: Crear nuevo Admin (Invitaci贸n) */}
               <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
                 <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2 mb-2">
-                  <UserPlus className="text-green-600" /> Gestión de Administradores
+                  <UserPlus className="text-green-600" /> Gesti贸n de Administradores
                 </h3>
                 <p className="text-sm text-gray-500 mb-4">
-                  Pre-autoriza a nuevos administradores. Cuando se registren con este correo, tendrán acceso inmediato.
+                  Pre-autoriza a nuevos administradores. Cuando se registren con este correo, tendr谩n acceso inmediato.
                 </p>
                 <form onSubmit={handleInviteAdmin} className="flex gap-2">
                   <input 
@@ -984,7 +1005,7 @@ const AdminDashboard = ({ user }) => {
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
                   />
                   <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700">
-                    Añadir
+                    A帽adir
                   </button>
                 </form>
 
@@ -1009,13 +1030,13 @@ const AdminDashboard = ({ user }) => {
                 )}
               </div>
 
-              {/* Sección 2: Cambiar código de admin general */}
+              {/* Secci贸n 2: Cambiar c贸digo de admin general */}
               <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-indigo-500">
                 <h3 className="font-bold text-gray-700 text-lg flex items-center gap-2 mb-4">
-                  <Key className="text-indigo-600" /> Cambiar Contraseña General
+                  <Key className="text-indigo-600" /> Cambiar Contrase帽a General
                 </h3>
                 <p className="text-sm text-gray-500 mb-6">
-                  Esta contraseña sirve para que cualquier usuario se registre como administrador manualmente.
+                  Esta contrase帽a sirve para que cualquier usuario se registre como administrador manualmente.
                 </p>
                 
                 <form onSubmit={handleChangeAdminCode} className="space-y-4">
@@ -1024,12 +1045,12 @@ const AdminDashboard = ({ user }) => {
                       type="text" 
                       value={newAdminCode}
                       onChange={(e) => setNewAdminCode(e.target.value)}
-                      placeholder="Nueva contraseña general..."
+                      placeholder="Nueva contrase帽a general..."
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>
                   <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-                    Actualizar Contraseña
+                    Actualizar Contrase帽a
                   </button>
                 </form>
 
@@ -1047,13 +1068,13 @@ const AdminDashboard = ({ user }) => {
                     <ShieldAlert /> Zona Maestra
                   </h3>
                   <p className="text-sm text-red-600 mb-4">
-                    Como usuario maestro, puedes restaurar la contraseña original en caso de emergencia.
+                    Como usuario maestro, puedes restaurar la contrase帽a original en caso de emergencia.
                   </p>
                   <button 
                     onClick={handleResetAdminCode}
                     className="w-full bg-white border-2 border-red-600 text-red-600 font-bold py-2 rounded-lg hover:bg-red-600 hover:text-white transition-colors flex items-center justify-center gap-2"
                   >
-                    <RefreshCcw size={18} /> Restaurar Contraseña Original (123456)
+                    <RefreshCcw size={18} /> Restaurar Contrase帽a Original (123456)
                   </button>
                 </div>
               )}
@@ -1071,7 +1092,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Escuchar cambios en la autenticación
+    // Escuchar cambios en la autenticaci贸n
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser) setLoading(false);
@@ -1101,7 +1122,7 @@ export default function App() {
   const handleCompleteProfile = async (formData) => {
     if (!user) return;
     try {
-      // ⚠️ IMPORTANTE: Usamos formData.name explícitamente para asegurar que se guarda
+      // 鈿狅笍 IMPORTANTE: Usamos formData.name expl铆citamente para asegurar que se guarda
       await setDoc(doc(db, COLLECTION_USERS, user.uid), {
          name: formData.name, // Aseguramos que este campo nunca falte
          role: formData.role,
@@ -1116,7 +1137,7 @@ export default function App() {
 
   if (loading) return <Loading />;
 
-  // Si no está logueado O si está logueado pero no tiene perfil (rol)
+  // Si no est谩 logueado O si est谩 logueado pero no tiene perfil (rol)
   if (!user || !userData) {
     return <AuthScreen onCompleteProfile={handleCompleteProfile} currentUser={user} />;
   }
