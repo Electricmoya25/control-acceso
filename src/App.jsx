@@ -1,12 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // =============================================================================
-//  🔴 INSTRUCCIONES PARA ACTIVAR EN TU PC (VS CODE)
+//  🔴 INSTRUCCIONES: EN TU PC, DESCOMENTA LAS SIGUIENTES 2 LÍNEAS:
 // =============================================================================
-//  1. BORRA las dos barras '//' del inicio de las siguientes 2 líneas para activarlas:
 import logoImg from './logo.png'; 
 import { auth, db } from './firebaseConfig';
 
+/* --- BLOQUE TEMPORAL PARA EVITAR ERRORES EN ESTE CHAT (BÓRRALO EN TU PC) --- 
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+const logoImg = "https://via.placeholder.com/150"; // Marcador de posición
+// Inicialización dummy para que compile aquí
+const appDummy = initializeApp({apiKey: "dummy", projectId: "dummy"}); 
+const auth = getAuth(appDummy);
+const db = getFirestore(appDummy);
+-------------------------------------------------------------------------- */
 
 import { 
   onAuthStateChanged,
@@ -62,7 +71,6 @@ const Logo = () => (
         className="w-full h-full object-cover" 
         onError={(e) => {
           e.target.style.display = 'none';
-          // Si falla la imagen, mostramos el icono
           const icon = e.target.nextSibling;
           if(icon) icon.style.opacity = 1;
         }} 
