@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "gcp-build": "npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "gcp-build": "npm run build",
     "start": "node server.js"
+    "start": "vite preview --host 0.0.0.0 --port ${PORT:=8080} --strictPort",
+    "prestart": "npm run build"
   },
   "dependencies": {
     "firebase": "^12.6.0",
