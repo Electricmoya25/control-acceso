@@ -1,47 +1,53 @@
 import React, { useState, useEffect } from 'react';
 
-// =============================================================================
-//  🔴 INSTRUCCIONES PARA TU PC (VS CODE)
-// =============================================================================
-// 1. Asegúrate de que estas líneas estén activas (sin //) en tu VS Code:
+// --- IMPORTACIONES ---
+// Asegúrate de que logo.png o logo.jpg está en la carpeta src
 import logoImg from './logo.png'; 
 import { auth, db } from './firebaseConfig';
 
-// --- BLOQUE DE COMPATIBILIDAD ---
-import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, query, onSnapshot, doc, updateDoc, setDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
-
-let auth_final, db_final, logo_final;
-try {
-  if (typeof __firebase_config !== 'undefined') {
-    const firebaseConfig = JSON.parse(__firebase_config);
-    const app = initializeApp(firebaseConfig);
-    auth_final = getAuth(app);
-    db_final = getFirestore(app);
-    logo_final = "https://via.placeholder.com/150?text=CLUB+PATINAJE";
-  }
-} catch (e) {}
-// =============================================================================
+import { 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut 
+} from 'firebase/auth';
 
 import { 
-  Clock, LogIn, LogOut, ShieldAlert, FileText, 
-  CheckCircle, Users, Briefcase, History, AlertCircle, 
-  Calendar, Trash2, Edit2, Plus, Save, X, FileBarChart
+  collection, 
+  addDoc, 
+  query, 
+  onSnapshot, 
+  doc, 
+  updateDoc, 
+  setDoc, 
+  deleteDoc, 
+  serverTimestamp, 
+  orderBy 
+} from 'firebase/firestore';
+
+import { 
+  Clock, LogIn, LogOut, ShieldAlert, 
+  Briefcase, History, Trash2, Edit2, 
+  Plus, Save, User, Calendar, 
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const COLLECTION_USERS = 'users'; 
 const COLLECTION_LOGS = 'logs';
-const COLLECTION_AUDIT = 'audit_trail'; // Para cumplimiento normativo
+const COLLECTION_AUDIT = 'audit_trail'; // Colección oculta para cumplimiento VeriFactu
 
+// --- Componente Logo ---
 const Logo = () => (
   <div className="flex flex-col items-center justify-center mb-6">
     <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center shadow-lg border-4 border-indigo-600 overflow-hidden relative z-10">
       <img 
-        src={typeof logoImg !== 'undefined' ? logoImg : logo_final} 
-        alt="Logo" 
+        src={logoImg} 
+        alt="Logo Club" 
         className="w-full h-full object-cover" 
-        onError={(e) => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.opacity = 1; }} 
+        onError={(e) => { 
+          e.target.style.display = 'none'; 
+          if (e.target.nextSibling) e.target.nextSibling.style.opacity = 1; 
+        }} 
       />
       <Briefcase className="w-16 h-16 text-indigo-600 absolute opacity-0" />
     </div>
@@ -56,25 +62,23 @@ const Loading = () => (
   </div>
 );
 
-// --- Función de Trazabilidad (Cumplimiento Normativo) ---
-const logAudit = async (db, action, details, user) => {
-  // En un sistema real VeriFactu, esto generaría un hash encadenado.
-  // Aquí simulamos el registro inmutable de la acción.
+// --- Trazabilidad (Cumplimiento VeriFactu) ---
+const logAudit = async (action, details, user) => {
   try {
     await addDoc(collection(db, COLLECTION_AUDIT), {
       action,
       details: JSON.stringify(details),
       performedBy: user.email || user.uid,
       timestamp: serverTimestamp(),
-      integrityHash: Math.random().toString(36).substring(7) // Simulación de hash
+      integrityHash: Math.random().toString(36).substring(7) 
     });
   } catch (e) {
     console.error("Error de auditoría:", e);
   }
 };
 
-// --- Pantalla de Autenticación Simplificada ---
-const AuthScreen = ({ authInstance, dbInstance }) => {
+// --- Pantalla de Login / Registro ---
+const AuthScreen = () => {
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -84,25 +88,29 @@ const AuthScreen = ({ authInstance, dbInstance }) => {
     e.preventDefault();
     setError('');
     
-    // Email "falso" interno para que Firebase funcione con Username
+    // Generamos un email interno ficticio para que Firebase Auth funcione con Username
     const fakeEmail = `${username.toLowerCase().replace(/\s+/g, '')}@club-patinaje.local`;
 
     try {
       if (isRegister) {
-        const userCredential = await createUserWithEmailAndPassword(authInstance, fakeEmail, password);
-        await setDoc(doc(dbInstance, COLLECTION_USERS, userCredential.user.uid), {
+        // --- REGISTRO NUEVO EMPLEADO ---
+        const userCredential = await createUserWithEmailAndPassword(auth, fakeEmail, password);
+        // Creamos la ficha del usuario en base de datos
+        await setDoc(doc(db, COLLECTION_USERS, userCredential.user.uid), {
           name: username,
-          role: 'employee', // Por defecto empleado
-          status: 'pending', // Requiere aprobación
-          password: password, // Visible para admin como pediste
+          role: 'employee',   // Rol por defecto
+          status: 'pending',  // Estado por defecto
+          password: password, // Guardamos contraseña visible para el admin
           createdAt: serverTimestamp()
         });
       } else {
+        // --- INICIO DE SESIÓN ---
         try {
-          const userCredential = await signInWithEmailAndPassword(authInstance, fakeEmail, password);
-          // Auto-corrección DUMMY (Admin por defecto)
+          const userCredential = await signInWithEmailAndPassword(auth, fakeEmail, password);
+          
+          // >>>> LÓGICA DUMMY (SUPER ADMIN) <<<<
           if (username.toUpperCase() === 'DUMMY') {
-             await setDoc(doc(dbInstance, COLLECTION_USERS, userCredential.user.uid), {
+             await setDoc(doc(db, COLLECTION_USERS, userCredential.user.uid), {
                 name: 'Administrador DUMMY',
                 role: 'admin',
                 status: 'active',
@@ -110,11 +118,13 @@ const AuthScreen = ({ authInstance, dbInstance }) => {
                 lastLogin: serverTimestamp()
              }, { merge: true });
           }
+
         } catch (loginErr) {
-          // Si DUMMY no existe, crearlo al vuelo
+          // Si falla el login, comprobamos si es el primer acceso del DUMMY
           if (username.toUpperCase() === 'DUMMY' && password === '123456' && loginErr.code === 'auth/user-not-found') {
-             const userCredential = await createUserWithEmailAndPassword(authInstance, fakeEmail, password);
-             await setDoc(doc(dbInstance, COLLECTION_USERS, userCredential.user.uid), {
+             // Creamos al admin DUMMY al vuelo
+             const userCredential = await createUserWithEmailAndPassword(auth, fakeEmail, password);
+             await setDoc(doc(db, COLLECTION_USERS, userCredential.user.uid), {
                 name: 'Administrador DUMMY',
                 role: 'admin',
                 status: 'active',
@@ -127,10 +137,10 @@ const AuthScreen = ({ authInstance, dbInstance }) => {
         }
       }
     } catch (err) {
-      console.error(err);
+      console.error("Error Auth:", err);
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') setError("Usuario o contraseña incorrectos.");
       else if (err.code === 'auth/email-already-in-use') setError("El usuario ya existe.");
-      else if (err.code === 'auth/weak-password') setError("La contraseña es muy corta (min 6).");
+      else if (err.code === 'auth/weak-password') setError("La contraseña es muy corta (mínimo 6 caracteres).");
       else setError("Error de acceso.");
     }
   };
@@ -140,31 +150,66 @@ const AuthScreen = ({ authInstance, dbInstance }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
         <Logo />
         <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
-          <button className={`flex-1 py-2 text-sm font-bold rounded-md ${!isRegister ? 'bg-white shadow text-indigo-900' : 'text-gray-500'}`} onClick={() => setIsRegister(false)}>Entrar</button>
-          <button className={`flex-1 py-2 text-sm font-bold rounded-md ${isRegister ? 'bg-white shadow text-indigo-900' : 'text-gray-500'}`} onClick={() => setIsRegister(true)}>Registrarse</button>
+          <button 
+            className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${!isRegister ? 'bg-white shadow text-indigo-900' : 'text-gray-500'}`} 
+            onClick={() => {setIsRegister(false); setError('');}}
+          >
+            Entrar
+          </button>
+          <button 
+            className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${isRegister ? 'bg-white shadow text-indigo-900' : 'text-gray-500'}`} 
+            onClick={() => {setIsRegister(true); setError('');}}
+          >
+            Registrarse
+          </button>
         </div>
         <form onSubmit={handleAuth} className="space-y-4">
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Nombre de Usuario</label>
-            <input type="text" required value={username} onChange={e=>setUsername(e.target.value)} className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-900" placeholder="Ej. AlexPatin" />
+            <input 
+              type="text" 
+              required 
+              value={username} 
+              onChange={e=>setUsername(e.target.value)} 
+              className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-900" 
+              placeholder={isRegister ? "Ej. AlexPatin" : "Usuario o DUMMY"} 
+            />
           </div>
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Contraseña</label>
-            <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-900" placeholder="******" />
+            <input 
+              type="password" 
+              required 
+              value={password} 
+              onChange={e=>setPassword(e.target.value)} 
+              className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-900" 
+              placeholder="******" 
+            />
           </div>
-          {error && <div className="p-3 bg-red-50 text-red-700 text-sm rounded border border-red-100 text-center">{error}</div>}
+          
+          {error && (
+            <div className="p-3 bg-red-50 text-red-700 text-sm rounded border border-red-100 text-center">
+              {error}
+            </div>
+          )}
+
           <button type="submit" className="w-full bg-indigo-900 hover:bg-indigo-800 text-white font-bold py-3 rounded-xl shadow-lg transition-transform active:scale-95">
             {isRegister ? 'Crear mi cuenta' : 'Iniciar Sesión'}
           </button>
         </form>
-        {isRegister && <p className="mt-4 text-xs text-center text-gray-500">Tu cuenta deberá ser activada por el administrador.</p>}
+        
+        {isRegister && (
+          <p className="mt-4 text-xs text-center text-gray-500">
+            Tu cuenta quedará pendiente hasta que el administrador la active.
+          </p>
+        )}
       </div>
     </div>
   );
 };
 
-// --- Panel de Empleado (Autogestión Total) ---
-const EmployeeDashboard = ({ user, userDocId, dbInstance, authInstance }) => {
+// --- Panel de Empleado ---
+const EmployeeDashboard = ({ user, userDocId }) => {
   const [logs, setLogs] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editDate, setEditDate] = useState('');
@@ -175,26 +220,23 @@ const EmployeeDashboard = ({ user, userDocId, dbInstance, authInstance }) => {
   const [addTime, setAddTime] = useState('');
 
   useEffect(() => {
-    // Escuchar logs ordenados
-    const q = query(collection(dbInstance, COLLECTION_LOGS), orderBy('timestamp', 'desc'));
+    const q = query(collection(db, COLLECTION_LOGS), orderBy('timestamp', 'desc'));
     return onSnapshot(q, (snapshot) => {
-      // Filtrado en cliente por simplicidad
       const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setLogs(allLogs.filter(log => log.userId === userDocId));
     });
-  }, [userDocId, dbInstance]);
+  }, [userDocId]);
 
   const handleClock = async (type) => {
     const now = new Date();
-    await addDoc(collection(dbInstance, COLLECTION_LOGS), {
+    await addDoc(collection(db, COLLECTION_LOGS), {
       userId: userDocId, 
       userName: user.name, 
       type, 
       timestamp: serverTimestamp(),
       manual: false 
     });
-    // Trazabilidad
-    logAudit(dbInstance, 'CLOCK_IN_OUT', { type, time: now.toString() }, user);
+    logAudit('CLOCK_IN_OUT', { type, time: now.toString() }, user);
   };
 
   const handleAddManual = async (e) => {
@@ -202,40 +244,41 @@ const EmployeeDashboard = ({ user, userDocId, dbInstance, authInstance }) => {
     if (!addDate || !addTime) return;
     const dateObj = new Date(`${addDate}T${addTime}`);
     
-    await addDoc(collection(dbInstance, COLLECTION_LOGS), {
+    await addDoc(collection(db, COLLECTION_LOGS), {
       userId: userDocId,
       userName: user.name,
       type: addType,
-      timestamp: dateObj, // Guardamos objeto fecha directamente si no usamos serverTimestamp
+      timestamp: dateObj,
       manual: true
     });
     
-    logAudit(dbInstance, 'MANUAL_ADD', { date: addDate, time: addTime, type: addType }, user);
+    logAudit('MANUAL_ADD', { date: addDate, time: addTime, type: addType }, user);
     setIsAdding(false);
     setAddTime('');
   };
 
   const handleDelete = async (logId, logData) => {
-    if(!window.confirm("¿Seguro que quieres borrar este fichaje? Se guardará un registro de esta acción.")) return;
-    await deleteDoc(doc(dbInstance, COLLECTION_LOGS, logId));
-    logAudit(dbInstance, 'DELETE_LOG', { logId, originalData: logData }, user);
+    if(!window.confirm("¿Borrar este fichaje?")) return;
+    await deleteDoc(doc(db, COLLECTION_LOGS, logId));
+    logAudit('DELETE_LOG', { logId, originalData: logData }, user);
   };
 
   const startEdit = (log) => {
     setEditingId(log.id);
-    const d = log.timestamp.seconds ? new Date(log.timestamp.seconds * 1000) : log.timestamp;
-    // Formatear para inputs
-    setEditDate(d.toISOString().split('T')[0]);
-    setEditTime(d.toTimeString().slice(0,5));
+    const d = log.timestamp.seconds ? new Date(log.timestamp.seconds * 1000) : new Date(log.timestamp);
+    // Ajuste simple para inputs
+    const isoString = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString();
+    setEditDate(isoString.split('T')[0]);
+    setEditTime(isoString.split('T')[1].slice(0,5));
   };
 
   const saveEdit = async (logId) => {
     const newDateObj = new Date(`${editDate}T${editTime}`);
-    await updateDoc(doc(dbInstance, COLLECTION_LOGS, logId), {
+    await updateDoc(doc(db, COLLECTION_LOGS, logId), {
       timestamp: newDateObj,
       manual: true
     });
-    logAudit(dbInstance, 'EDIT_LOG', { logId, newDate: editDate, newTime: editTime }, user);
+    logAudit('EDIT_LOG', { logId, newDate: editDate, newTime: editTime }, user);
     setEditingId(null);
   };
 
@@ -245,12 +288,11 @@ const EmployeeDashboard = ({ user, userDocId, dbInstance, authInstance }) => {
         <Clock className="w-20 h-20 text-yellow-500 mb-4" />
         <h2 className="text-2xl font-bold text-gray-800">Cuenta Pendiente</h2>
         <p className="text-gray-600 mt-2">El administrador debe validar tu usuario.</p>
-        <button onClick={() => signOut(authInstance)} className="mt-8 text-indigo-600 font-bold underline">Salir</button>
+        <button onClick={() => signOut(auth)} className="mt-8 text-indigo-600 font-bold underline">Salir</button>
       </div>
     );
   }
 
-  // Estado actual (aproximado basado en el último log)
   const lastLog = logs.length > 0 ? logs[0] : null;
   const currentStatus = lastLog ? lastLog.type : 'out';
 
@@ -258,12 +300,10 @@ const EmployeeDashboard = ({ user, userDocId, dbInstance, authInstance }) => {
     <div className="min-h-screen bg-gray-100 pb-20">
       <header className="bg-indigo-900 text-white p-4 shadow-md flex justify-between items-center sticky top-0 z-20">
         <div className="flex items-center gap-2 font-bold text-lg"><Briefcase size={20}/> {user.name}</div>
-        <button onClick={() => signOut(authInstance)} className="bg-indigo-800 px-3 py-1 rounded text-sm hover:bg-indigo-700">Salir</button>
+        <button onClick={() => signOut(auth)} className="bg-indigo-800 px-3 py-1 rounded text-sm hover:bg-indigo-700">Salir</button>
       </header>
       
       <main className="max-w-xl mx-auto p-4 space-y-6">
-        
-        {/* Panel de Fichaje Rápido */}
         <div className="bg-white rounded-2xl shadow-lg p-6 text-center">
           <p className="text-gray-500 mb-4 font-medium uppercase text-xs tracking-wide">Fichaje en Tiempo Real</p>
           <div className="grid grid-cols-2 gap-3">
@@ -281,7 +321,6 @@ const EmployeeDashboard = ({ user, userDocId, dbInstance, authInstance }) => {
           </div>
         </div>
 
-        {/* Panel de Gestión (Añadir/Editar/Borrar) */}
         <div className="bg-white rounded-xl shadow overflow-hidden">
           <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
             <h3 className="font-bold text-gray-700 flex items-center gap-2"><History size={16}/> Mi Historial</h3>
@@ -290,7 +329,6 @@ const EmployeeDashboard = ({ user, userDocId, dbInstance, authInstance }) => {
             </button>
           </div>
 
-          {/* Formulario Añadir Manual */}
           {isAdding && (
             <div className="p-4 bg-indigo-50 border-b animate-in slide-in-from-top-2">
               <form onSubmit={handleAddManual} className="flex flex-col gap-2">
@@ -309,11 +347,10 @@ const EmployeeDashboard = ({ user, userDocId, dbInstance, authInstance }) => {
             </div>
           )}
 
-          {/* Lista de Registros */}
           <div className="max-h-[400px] overflow-y-auto">
             {logs.length === 0 ? <p className="p-4 text-center text-gray-400 text-sm">No hay registros.</p> : null}
             {logs.map(log => {
-              const d = log.timestamp.seconds ? new Date(log.timestamp.seconds * 1000) : log.timestamp; // Manejo de timestamp firestore vs fecha js
+              const d = log.timestamp.seconds ? new Date(log.timestamp.seconds * 1000) : new Date(log.timestamp);
               
               if (editingId === log.id) {
                 return (
@@ -356,57 +393,81 @@ const EmployeeDashboard = ({ user, userDocId, dbInstance, authInstance }) => {
 };
 
 // --- Dashboard Administrador ---
-const AdminDashboard = ({ dbInstance, authInstance }) => {
+const AdminDashboard = ({ user }) => {
   const [users, setUsers] = useState([]);
   const [logs, setLogs] = useState([]);
-  const [view, setView] = useState('users'); 
+  const [view, setView] = useState('calendar'); 
+  const [currentWeekStart, setCurrentWeekStart] = useState(new Date());
 
   useEffect(() => {
-    // Escuchar cambios en tiempo real
-    const unsubUsers = onSnapshot(collection(dbInstance, COLLECTION_USERS), snap => setUsers(snap.docs.map(d => ({id:d.id, ...d.data()}))));
-    const unsubLogs = onSnapshot(collection(dbInstance, COLLECTION_LOGS), snap => setLogs(snap.docs.map(d => ({id:d.id, ...d.data()}))));
+    // Inicializar semana al lunes actual
+    const curr = new Date();
+    const first = curr.getDate() - curr.getDay() + 1; 
+    const monday = new Date(curr.setDate(first));
+    monday.setHours(0,0,0,0);
+    setCurrentWeekStart(monday);
+
+    const unsubUsers = onSnapshot(collection(db, COLLECTION_USERS), snap => setUsers(snap.docs.map(d => ({id:d.id, ...d.data()}))));
+    const unsubLogs = onSnapshot(collection(db, COLLECTION_LOGS), snap => setLogs(snap.docs.map(d => ({id:d.id, ...d.data()}))));
     return () => { unsubUsers(); unsubLogs(); };
-  }, [dbInstance]);
+  }, []);
 
-  const approveUser = async (id) => await updateDoc(doc(dbInstance, COLLECTION_USERS, id), { status: 'active' });
-  const deleteUser = async (id) => { if(window.confirm("¿Borrar usuario y sus datos?")) await deleteDoc(doc(dbInstance, COLLECTION_USERS, id)); };
+  const approveUser = async (id) => await updateDoc(doc(db, COLLECTION_USERS, id), { status: 'active' });
+  const deleteUser = async (id) => { if(window.confirm("¿Borrar usuario y sus datos?")) await deleteDoc(doc(db, COLLECTION_USERS, id)); };
 
-  // Cálculo de Horas Trabajadas (Estimación)
-  const calculateHours = (userId) => {
-    // Obtenemos logs del usuario ordenados
-    const userLogs = logs.filter(l => l.userId === userId).sort((a,b) => {
-        const tA = a.timestamp.seconds || (a.timestamp.getTime()/1000);
-        const tB = b.timestamp.seconds || (b.timestamp.getTime()/1000);
-        return tA - tB;
-    });
-
-    let totalMilliseconds = 0;
-    let entryTime = null;
-
-    userLogs.forEach(log => {
-        const time = log.timestamp.seconds ? log.timestamp.seconds * 1000 : log.timestamp.getTime(); // timestamp a ms
-        if (log.type === 'in') {
-            entryTime = time;
-        } else if (log.type === 'out' && entryTime) {
-            totalMilliseconds += (time - entryTime);
-            entryTime = null;
-        }
-    });
-
-    // Convertir a horas
-    const hours = Math.floor(totalMilliseconds / (1000 * 60 * 60));
-    const minutes = Math.floor((totalMilliseconds % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}m`;
+  const changeWeek = (d) => {
+    const newDate = new Date(currentWeekStart);
+    newDate.setDate(newDate.getDate() + (d * 7));
+    setCurrentWeekStart(newDate);
   };
+
+  const getWeeklyData = () => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(currentWeekStart);
+      d.setDate(d.getDate() + i);
+      days.push(d);
+    }
+    return { days, rows: users.filter(u=>u.role!=='admin').map(user => {
+      const userLogs = logs.filter(l => l.userId === user.id);
+      const daysData = days.map(day => {
+        const dayLogs = userLogs.filter(l => {
+          if (!l.timestamp) return false;
+          const logDate = l.timestamp.seconds ? new Date(l.timestamp.seconds * 1000) : new Date(l.timestamp);
+          return logDate.toDateString() === day.toDateString();
+        }).sort((a,b) => {
+           const ta = a.timestamp.seconds || 0;
+           const tb = b.timestamp.seconds || 0;
+           return ta - tb;
+        });
+        
+        if (dayLogs.length === 0) return null;
+        
+        const firstIn = dayLogs.find(l => l.type === 'in');
+        const lastOut = [...dayLogs].reverse().find(l => l.type === 'out');
+        
+        const fmt = (t) => {
+            if(!t) return '-';
+            const date = t.seconds ? new Date(t.seconds*1000) : new Date(t);
+            return date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        };
+
+        return { in: fmt(firstIn?.timestamp), out: fmt(lastOut?.timestamp) };
+      });
+      return { user, daysData };
+    })};
+  };
+
+  const weeklyData = getWeeklyData();
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-indigo-900 text-white p-4 shadow-lg flex justify-between items-center sticky top-0 z-20">
-        <div className="flex items-center gap-2"><ShieldAlert /> <h1 className="font-bold">Administración</h1></div>
+        <div className="flex items-center gap-2"><ShieldAlert /> <h1 className="font-bold">Panel Admin</h1></div>
         <div className="flex gap-4 text-sm font-bold text-indigo-200">
+          <button onClick={()=>setView('calendar')} className={view==='calendar'?'text-white underline':''}>Calendario</button>
           <button onClick={()=>setView('users')} className={view==='users'?'text-white underline':''}>Usuarios</button>
-          <button onClick={()=>setView('reports')} className={view==='reports'?'text-white underline':''}>Informes</button>
-          <button onClick={() => signOut(authInstance)} className="text-red-400 hover:text-white">Salir</button>
+          <button onClick={() => signOut(auth)} className="text-red-400 hover:text-white">Salir</button>
         </div>
       </header>
 
@@ -422,7 +483,7 @@ const AdminDashboard = ({ dbInstance, authInstance }) => {
                 {users.map(u => (
                   <tr key={u.id} className="border-b hover:bg-gray-50">
                     <td className="p-4 font-bold text-indigo-900">{u.name} {u.role==='admin' && <span className="bg-indigo-100 text-indigo-700 text-xs px-1 rounded ml-2">ADMIN</span>}</td>
-                    <td className="p-4 font-mono text-gray-600 bg-gray-50 rounded px-2">{u.password || '****'}</td>
+                    <td className="p-4 font-mono text-gray-600 bg-gray-50 rounded px-2 select-all">{u.password || '****'}</td>
                     <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold ${u.status==='active'?'bg-green-100 text-green-800':'bg-yellow-100 text-yellow-800'}`}>{u.status}</span></td>
                     <td className="p-4 flex gap-2">
                       {u.status === 'pending' && <button onClick={()=>approveUser(u.id)} className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">Aceptar</button>}
@@ -435,28 +496,50 @@ const AdminDashboard = ({ dbInstance, authInstance }) => {
           </div>
         )}
 
-        {view === 'reports' && (
-          <div className="max-w-5xl mx-auto bg-white rounded-xl shadow overflow-hidden">
-             <div className="p-4 bg-gray-50 border-b flex justify-between">
-                <h3 className="font-bold text-gray-700">Resumen de Horas (Estimado)</h3>
-                <span className="text-xs text-gray-400 flex items-center gap-1"><ShieldAlert size={12}/> Auditoría Activa</span>
-             </div>
-             <table className="w-full text-sm text-left">
-              <thead className="bg-gray-100 text-gray-500 uppercase font-bold">
-                <tr><th className="p-4">Empleado</th><th className="p-4">Fichajes Totales</th><th className="p-4">Horas Totales</th></tr>
-              </thead>
-              <tbody>
-                {users.filter(u=>u.role!=='admin').map(u => (
-                  <tr key={u.id} className="border-b">
-                    <td className="p-4 font-bold">{u.name}</td>
-                    <td className="p-4">{logs.filter(l=>l.userId===u.id).length} movimientos</td>
-                    <td className="p-4 font-mono font-bold text-indigo-700">{calculateHours(u.id)}</td>
+        {view === 'calendar' && (
+          <div className="bg-white rounded-xl shadow overflow-hidden flex flex-col h-full">
+            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+              <div className="flex flex-col">
+                 <h2 className="font-bold text-gray-700">Resumen Semanal</h2>
+                 <span className="text-xs text-gray-500">{weeklyData.days[0].toLocaleDateString()} - {weeklyData.days[6].toLocaleDateString()}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={()=>changeWeek(-1)} className="p-1 hover:bg-gray-200 rounded"><ChevronLeft/></button>
+                <button onClick={()=>changeWeek(1)} className="p-1 hover:bg-gray-200 rounded"><ChevronRight/></button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs md:text-sm text-center border-collapse">
+                <thead>
+                  <tr className="bg-indigo-900 text-white">
+                    <th className="p-3 text-left sticky left-0 bg-indigo-900 z-10 w-32 border-r border-indigo-800">Empleado</th>
+                    {weeklyData.days.map((d, i) => (
+                      <th key={i} className="p-2 border-l border-indigo-800 min-w-[70px]">
+                        <div>{['L','M','X','J','V','S','D'][i]}</div>
+                        <div className="font-normal opacity-75">{d.getDate()}</div>
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="p-4 text-xs text-gray-400 bg-gray-50 border-t">
-               * Nota: El sistema guarda un registro de auditoría interno de todas las modificaciones realizadas por los usuarios para cumplir con la normativa.
+                </thead>
+                <tbody>
+                  {weeklyData.rows.length === 0 && <tr><td colSpan="8" className="p-4 text-gray-400">No hay empleados registrados.</td></tr>}
+                  {weeklyData.rows.map((row, i) => (
+                    <tr key={i} className="border-b hover:bg-gray-50">
+                      <td className="p-3 text-left font-bold sticky left-0 bg-white border-r text-indigo-900">{row.user.name}</td>
+                      {row.daysData.map((data, j) => (
+                        <td key={j} className="p-1 border-l">
+                          {data ? (
+                            <div className="flex flex-col gap-1 text-[10px]">
+                              <span className="bg-green-100 text-green-800 px-1 rounded">{data.in}</span>
+                              <span className="bg-red-100 text-red-800 px-1 rounded">{data.out}</span>
+                            </div>
+                          ) : <span className="text-gray-200">-</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -465,45 +548,44 @@ const AdminDashboard = ({ dbInstance, authInstance }) => {
   );
 };
 
+// --- Componente Principal ---
 export default function App() {
   const [user, setUser] = useState(null); 
   const [userData, setUserData] = useState(null); 
   const [loading, setLoading] = useState(true);
 
-  const currentAuth = typeof auth !== 'undefined' ? auth : auth_final;
-  const currentDb = typeof db !== 'undefined' ? db : db_final;
-
+  // Escuchar estado de autenticación
   useEffect(() => {
-    if (!currentAuth) return;
-    return onAuthStateChanged(currentAuth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser) setLoading(false);
     });
-  }, [currentAuth]);
+    return () => unsubscribe();
+  }, []);
 
+  // Escuchar perfil de usuario en base de datos
   useEffect(() => {
-    if (!user || !currentDb) {
-      if(!user) setUserData(null);
+    if (!user) {
+      setUserData(null);
       return;
     }
-    // Escucha en tiempo real del documento de usuario
-    const unsub = onSnapshot(doc(currentDb, COLLECTION_USERS, user.uid), (docSnap) => {
+    const unsub = onSnapshot(doc(db, COLLECTION_USERS, user.uid), (docSnap) => {
       if (docSnap.exists()) setUserData({ ...docSnap.data(), uid: user.uid });
       else setUserData(null);
       setLoading(false);
     });
     return () => unsub();
-  }, [user, currentDb]);
+  }, [user]);
 
   if (loading) return <Loading />;
   
   if (!user || !userData) {
-    return <AuthScreen authInstance={currentAuth} dbInstance={currentDb} />;
+    return <AuthScreen />;
   }
 
   if (userData.role === 'admin' && userData.status === 'active') {
-    return <AdminDashboard dbInstance={currentDb} authInstance={currentAuth} />;
+    return <AdminDashboard user={userData} />;
   }
 
-  return <EmployeeDashboard user={userData} userDocId={user.uid} dbInstance={currentDb} authInstance={currentAuth} />;
+  return <EmployeeDashboard user={userData} userDocId={user.uid} />;
 }
