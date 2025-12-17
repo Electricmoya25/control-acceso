@@ -1,80 +1,87 @@
-import { createServer } from 'node:http';
-import { createReadStream, existsSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import http from 'http';
+import { readFile, stat } from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { URL } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const distDir = path.join(__dirname, 'dist');
+const indexPath = path.join(distDir, 'index.html');
+const defaultPort = 8080;
 
-if (!existsSync(distDir)) {
-  console.error('No se encontró el directorio "dist". Ejecuta "npm run build" antes de iniciar el servidor.');
-  process.exit(1);
-}
+const mimeTypes = new Map([
+  ['.html', 'text/html'],
+  ['.js', 'application/javascript'],
+  ['.css', 'text/css'],
+  ['.svg', 'image/svg+xml'],
+  ['.json', 'application/json'],
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.ico', 'image/x-icon'],
+  ['.txt', 'text/plain'],
+]);
 
-const PORT = Number(process.env.PORT) || 8080;
-
-const mimeTypes = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.ico': 'image/x-icon',
-  '.txt': 'text/plain; charset=utf-8',
-  '.map': 'application/json; charset=utf-8'
+const getContentType = (filePath) => {
+  const ext = path.extname(filePath).toLowerCase();
+  return mimeTypes.get(ext) || 'application/octet-stream';
 };
 
-const getContentType = (filePath) => mimeTypes[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
+const sanitizePath = (requestedPath) => {
+  const decoded = decodeURIComponent(requestedPath);
+  const normalized = path.posix.normalize(decoded);
+  const withoutTraversal = normalized.replace(/^\.\.(?:\/.+)?$/, '');
+  const relativePath = withoutTraversal.startsWith('/')
+    ? withoutTraversal.slice(1)
+    : withoutTraversal;
+  return path.join(distDir, relativePath);
+};
 
-const serveFile = async (filePath, res) => {
+const serveFile = async (filePath) => {
+  const fileStat = await stat(filePath);
+  if (!fileStat.isFile()) {
+    throw new Error('Not a file');
+  }
+  const data = await readFile(filePath);
+  return { data, contentType: getContentType(filePath) };
+};
+
+const requestHandler = async (req, res) => {
+  if (!req.url) {
+    res.statusCode = 400;
+    res.end('Bad Request');
+    return;
+  }
+
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const targetPath = sanitizePath(url.pathname);
+
   try {
-    const stats = await stat(filePath);
-    if (stats.isDirectory()) {
-      filePath = path.join(filePath, 'index.html');
+    const { data, contentType } = await serveFile(targetPath);
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(data);
+  } catch {
+    try {
+      const { data, contentType } = await serveFile(indexPath);
+      res.writeHead(200, { 'Content-Type': contentType });
+      res.end(data);
+    } catch (err) {
+      console.error('Failed to serve request', err);
+      res.statusCode = 500;
+      res.end('Internal Server Error');
     }
-    res.writeHead(200, { 'Content-Type': getContentType(filePath) });
-    createReadStream(filePath).pipe(res);
-  } catch (error) {
-    if (filePath.endsWith('index.html')) {
-      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Error interno del servidor');
-      return;
-    }
-
-    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('Recurso no encontrado');
-    console.error('Error al servir', filePath, error.message);
   }
 };
 
-const server = createServer(async (req, res) => {
-  const url = new URL(req.url ?? '/', 'http://localhost');
-  const requestedPath = decodeURIComponent(url.pathname);
-  const hasExtension = path.extname(requestedPath) !== '';
-  let filePath = path.join(distDir, requestedPath);
+const port = Number(process.env.PORT) || defaultPort;
 
-  try {
-    const stats = await stat(filePath);
-    if (stats.isDirectory()) {
-      filePath = path.join(filePath, 'index.html');
-    }
-    await serveFile(filePath, res);
-  } catch (error) {
-    if (!hasExtension) {
-      await serveFile(path.join(distDir, 'index.html'), res);
-    } else {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Recurso no encontrado');
-      console.error('Recurso no encontrado', filePath, error.message);
-    }
-  }
+const server = http.createServer((req, res) => {
+  requestHandler(req, res);
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor listo en http://0.0.0.0:${PORT}`);
+server.listen(port, '0.0.0.0', () => {
+  console.log(`Server listening on http://0.0.0.0:${port}`);
 });
