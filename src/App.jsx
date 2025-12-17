@@ -4,22 +4,10 @@ import React, { useState, useEffect } from 'react';
 //  🔴 INSTRUCCIONES PARA TU PC (VS CODE)
 // =============================================================================
 // 1. DESCOMENTA (quita las //) de las siguientes 2 líneas para que funcione:
-// import logoImg from './logo.png'; 
-// import { auth, db } from './firebaseConfig';
+import logoImg from './logo.png'; 
+import { auth, db } from './firebaseConfig';
 
-// 2. Una vez descomentadas las de arriba, BORRA el bloque "CÓDIGO TEMPORAL" de abajo.
-// =============================================================================
 
-// --- INICIO CÓDIGO TEMPORAL (SOLO PARA QUE NO DE ERROR EL CHAT) ---
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-const logoImg = "https://via.placeholder.com/150?text=LOGO"; // Marcador de posición
-// Inicialización dummy para que compile aquí
-const appDummy = initializeApp({apiKey: "dummy", projectId: "dummy"}); 
-const auth = getAuth(appDummy);
-const db = getFirestore(appDummy);
-// --- FIN CÓDIGO TEMPORAL -----------------------------------------
 
 import { 
   onAuthStateChanged, 
