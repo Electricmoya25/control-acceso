@@ -47,3 +47,8 @@ Estos pasos te ayudan a que los cambios de la aplicación de control de acceso l
 - Haz commits pequeños y descriptivos para facilitar la revisión.
 - Si añades dependencias nuevas, incluye la razón en la descripción del PR.
 - Para cambios de UI, agrega capturas de pantalla en el PR para que los revisores vean el impacto visual.
+- El comando `npm start` ejecuta automáticamente `npm run build` antes de servir la previsualización, evitando errores de
+  arranque en despliegues como Cloud Run o Firebase Hosting.
+- `npm start` sirve la app en `PORT` (por defecto 8080) con `--strictPort`, así que la revisión de salud de Cloud Run
+  siempre encontrará el servicio escuchando en el puerto esperado.
+
