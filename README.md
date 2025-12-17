@@ -1,16 +1,49 @@
-# React + Vite
+# Guía para aplicar cambios en GitHub
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Estos pasos te ayudan a que los cambios de la aplicación de control de acceso lleguen correctamente a GitHub y queden listos para revisión o despliegue.
 
-Currently, two official plugins are available:
+## Requisitos previos
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Tener configurado Git en tu máquina y acceso de escritura al repositorio.
+- Node 20+ y npm instalados.
+- Variables de entorno de Firebase definidas (por ejemplo, en `.env` o en tu proveedor de CI) según las claves del proyecto.
 
-## React Compiler
+## Flujo recomendado
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. **Instala dependencias** (solo la primera vez o cuando cambien):
 
-## Expanding the ESLint configuration
+   ```bash
+   npm install
+   ```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+2. **Verifica que todo compile** antes de subir los cambios:
+
+   ```bash
+   npm run build
+   ```
+
+3. **Prepara y revisa el commit**:
+
+   ```bash
+   git status
+   git add .
+   git commit -m "Describe brevemente el cambio"
+   ```
+
+   Usa `git status` para confirmar que solo se incluyen los archivos deseados.
+
+4. **Envía la rama a GitHub**:
+
+   ```bash
+   git push origin <nombre-de-tu-rama>
+   ```
+
+5. **Crea un Pull Request** en GitHub desde esa rama hacia la rama principal (por ejemplo, `main` o `work`). Incluye un resumen del cambio y evidencia de pruebas (`npm run build`).
+
+6. **Espera la revisión y haz merge** cuando el PR esté aprobado. Si usas despliegue automático, verifica que el pipeline (CI/CD) se ejecute sin errores tras el merge.
+
+## Consejos
+
+- Haz commits pequeños y descriptivos para facilitar la revisión.
+- Si añades dependencias nuevas, incluye la razón en la descripción del PR.
+- Para cambios de UI, agrega capturas de pantalla en el PR para que los revisores vean el impacto visual.
