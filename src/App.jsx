@@ -1,14 +1,25 @@
 import React, { useState, useEffect } from 'react';
 
 // =============================================================================
-//  🔴 INSTRUCCIONES OBLIGATORIAS PARA TU PC (VS CODE)
+//  🔴 INSTRUCCIONES PARA TU PC (VS CODE)
 // =============================================================================
-// 1. BORRA las dos barras '//' de las siguientes 2 líneas para que funcione:
-import logoImg from './logo.png'; 
-import { auth, db } from './firebaseConfig';
+// 1. DESCOMENTA (quita las //) de las siguientes 2 líneas para que funcione:
+// import logoImg from './logo.png'; 
+// import { auth, db } from './firebaseConfig';
 
 // 2. Una vez descomentadas las de arriba, BORRA el bloque "CÓDIGO TEMPORAL" de abajo.
 // =============================================================================
+
+// --- INICIO CÓDIGO TEMPORAL (SOLO PARA QUE NO DE ERROR EL CHAT) ---
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+const logoImg = "https://via.placeholder.com/150?text=LOGO"; // Marcador de posición
+// Inicialización dummy para que compile aquí
+const appDummy = initializeApp({apiKey: "dummy", projectId: "dummy"}); 
+const auth = getAuth(appDummy);
+const db = getFirestore(appDummy);
+// --- FIN CÓDIGO TEMPORAL -----------------------------------------
 
 import { 
   onAuthStateChanged, 
@@ -69,7 +80,6 @@ const Loading = () => (
 
 // --- Trazabilidad (Cumplimiento VeriFactu) ---
 const logAudit = async (action, details, user) => {
-  if (!db || !user) return;
   try {
     await addDoc(collection(db, COLLECTION_AUDIT), {
       action,
@@ -94,12 +104,6 @@ const AuthScreen = () => {
     e.preventDefault();
     setError('');
     
-    // Si auth es undefined, es porque el usuario no descomentó las líneas en local
-    if (!auth) {
-      setError("Error de configuración: Descomenta 'import { auth }...' en App.jsx");
-      return;
-    }
-
     // Generamos un email interno ficticio para que Firebase Auth funcione con Username
     const fakeEmail = `${username.toLowerCase().replace(/\s+/g, '')}@club-patinaje.local`;
 
@@ -120,9 +124,8 @@ const AuthScreen = () => {
         try {
           const userCredential = await signInWithEmailAndPassword(auth, fakeEmail, password);
           
-          // >>>> LÓGICA ADMIN (SUPER ADMIN) <<<<
-          // Si entra 'admin', nos aseguramos de que sus permisos sean correctos SIEMPRE
-          if (username.trim().toUpperCase() === 'ADMIN') {
+          // >>>> LÓGICA DUMMY (SUPER ADMIN) <<<<
+          if (username.toUpperCase() === 'ADMIN') {
              await setDoc(doc(db, COLLECTION_USERS, userCredential.user.uid), {
                 name: 'Administrador Principal',
                 role: 'admin',
@@ -133,9 +136,9 @@ const AuthScreen = () => {
           }
 
         } catch (loginErr) {
-          // Si falla el login, comprobamos si es el primer acceso del ADMIN
-          if (username.trim().toUpperCase() === 'ADMIN' && password === '123456' && loginErr.code === 'auth/user-not-found') {
-             // Creamos al admin al vuelo
+          // Si falla el login, comprobamos si es el primer acceso del DUMMY
+          if (username.toUpperCase() === 'ADMIN' && password === '123456' && loginErr.code === 'auth/user-not-found') {
+             // Creamos al admin DUMMY al vuelo
              const userCredential = await createUserWithEmailAndPassword(auth, fakeEmail, password);
              await setDoc(doc(db, COLLECTION_USERS, userCredential.user.uid), {
                 name: 'Administrador Principal',
@@ -144,7 +147,7 @@ const AuthScreen = () => {
                 password: password,
                 createdAt: serverTimestamp()
              });
-             return; // Éxito, el observer de auth nos redirigirá
+             return; 
           }
           throw loginErr; 
         }
@@ -154,8 +157,7 @@ const AuthScreen = () => {
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') setError("Usuario o contraseña incorrectos.");
       else if (err.code === 'auth/email-already-in-use') setError("El usuario ya existe.");
       else if (err.code === 'auth/weak-password') setError("La contraseña es muy corta (mínimo 6 caracteres).");
-      else if (err.code === 'auth/network-request-failed') setError("Error de conexión. Verifica tu internet.");
-      else setError("Error de acceso: " + err.message);
+      else setError("Error de acceso.");
     }
   };
 
@@ -226,22 +228,28 @@ const AuthScreen = () => {
 const EmployeeDashboard = ({ user, userDocId }) => {
   const [logs, setLogs] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  
+  // Estados para edición
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
+  
+  // Estados para añadir manual
   const [isAdding, setIsAdding] = useState(false);
   const [addType, setAddType] = useState('in');
   const [addDate, setAddDate] = useState(new Date().toISOString().split('T')[0]);
   const [addTime, setAddTime] = useState('');
 
   useEffect(() => {
-    if (!db) return;
+    // Cargar logs ordenados por fecha descendente
     const q = query(collection(db, COLLECTION_LOGS), orderBy('timestamp', 'desc'));
     return onSnapshot(q, (snapshot) => {
       const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Filtramos en cliente para asegurar que solo ve los suyos
       setLogs(allLogs.filter(log => log.userId === userDocId));
     });
   }, [userDocId]);
 
+  // Fichaje normal (botón)
   const handleClock = async (type) => {
     const now = new Date();
     await addDoc(collection(db, COLLECTION_LOGS), {
@@ -251,9 +259,11 @@ const EmployeeDashboard = ({ user, userDocId }) => {
       timestamp: serverTimestamp(),
       manual: false 
     });
+    // Trazabilidad
     logAudit('CLOCK_IN_OUT', { type, time: now.toString() }, user);
   };
 
+  // Añadir registro manual (flexible)
   const handleAddManual = async (e) => {
     e.preventDefault();
     if (!addDate || !addTime) return;
@@ -266,20 +276,24 @@ const EmployeeDashboard = ({ user, userDocId }) => {
       timestamp: dateObj,
       manual: true
     });
+    
     logAudit('MANUAL_ADD', { date: addDate, time: addTime, type: addType }, user);
     setIsAdding(false);
     setAddTime('');
   };
 
+  // Borrar registro (flexible para usuario, auditado en background)
   const handleDelete = async (logId, logData) => {
     if(!window.confirm("¿Borrar este fichaje?")) return;
     await deleteDoc(doc(db, COLLECTION_LOGS, logId));
     logAudit('DELETE_LOG', { logId, originalData: logData }, user);
   };
 
+  // Iniciar edición
   const startEdit = (log) => {
     setEditingId(log.id);
     const d = log.timestamp.seconds ? new Date(log.timestamp.seconds * 1000) : new Date(log.timestamp);
+    // Ajuste simple de zona horaria para input type="datetime-local" o separados
     const offset = d.getTimezoneOffset() * 60000;
     const localISOTime = (new Date(d - offset)).toISOString().slice(0, -1);
     
@@ -287,6 +301,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     setEditTime(d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0'));
   };
 
+  // Guardar edición
   const saveEdit = async (logId) => {
     const newDateObj = new Date(`${editDate}T${editTime}`);
     await updateDoc(doc(db, COLLECTION_LOGS, logId), {
@@ -308,6 +323,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     );
   }
 
+  // Calcular estado actual basado en último log
   const lastLog = logs.length > 0 ? logs[0] : null;
   const currentStatus = lastLog ? lastLog.type : 'out';
 
@@ -319,6 +335,8 @@ const EmployeeDashboard = ({ user, userDocId }) => {
       </header>
       
       <main className="max-w-xl mx-auto p-4 space-y-6">
+        
+        {/* Panel de Fichaje */}
         <div className="bg-white rounded-2xl shadow-lg p-6 text-center">
           <p className="text-gray-500 mb-4 font-medium uppercase text-xs tracking-wide">Fichaje en Tiempo Real</p>
           <div className="grid grid-cols-2 gap-3">
@@ -336,6 +354,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
           </div>
         </div>
 
+        {/* Panel de Gestión (Historial Editable) */}
         <div className="bg-white rounded-xl shadow overflow-hidden">
           <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
             <h3 className="font-bold text-gray-700 flex items-center gap-2"><History size={16}/> Mi Historial</h3>
@@ -344,6 +363,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
             </button>
           </div>
 
+          {/* Formulario Añadir */}
           {isAdding && (
             <div className="p-4 bg-indigo-50 border-b animate-in slide-in-from-top-2">
               <form onSubmit={handleAddManual} className="flex flex-col gap-2">
@@ -362,6 +382,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
             </div>
           )}
 
+          {/* Lista de Logs */}
           <div className="max-h-[400px] overflow-y-auto">
             {logs.length === 0 ? <p className="p-4 text-center text-gray-400 text-sm">No hay registros.</p> : null}
             {logs.map(log => {
@@ -415,7 +436,7 @@ const AdminDashboard = ({ user }) => {
   const [currentWeekStart, setCurrentWeekStart] = useState(new Date());
 
   useEffect(() => {
-    if (!db) return;
+    // Inicializar semana al lunes actual
     const curr = new Date();
     const first = curr.getDate() - curr.getDay() + 1; 
     const monday = new Date(curr.setDate(first));
@@ -436,6 +457,7 @@ const AdminDashboard = ({ user }) => {
     setCurrentWeekStart(newDate);
   };
 
+  // Generar datos para la tabla semanal
   const getWeeklyData = () => {
     const days = [];
     for (let i = 0; i < 7; i++) {
@@ -478,7 +500,7 @@ const AdminDashboard = ({ user }) => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-indigo-900 text-white p-4 shadow-lg flex justify-between items-center sticky top-0 z-20">
-        <div className="flex items-center gap-2"><ShieldAlert /> <h1 className="font-bold">Panel Admin</h1></div>
+        <div className="flex items-center gap-2"><ShieldAlert /> <h1 className="font-bold">Administración</h1></div>
         <div className="flex gap-4 text-sm font-bold text-indigo-200">
           <button onClick={()=>setView('calendar')} className={view==='calendar'?'text-white underline':''}>Calendario</button>
           <button onClick={()=>setView('users')} className={view==='users'?'text-white underline':''}>Usuarios</button>
@@ -489,7 +511,10 @@ const AdminDashboard = ({ user }) => {
       <main className="p-4 flex-1 overflow-auto">
         {view === 'users' && (
           <div className="max-w-5xl mx-auto bg-white rounded-xl shadow overflow-hidden">
-            <div className="p-4 bg-gray-50 border-b font-bold text-gray-700">Lista de Trabajadores</div>
+            <div className="p-4 bg-gray-50 border-b font-bold text-gray-700 flex justify-between items-center">
+                <span>Lista de Trabajadores</span>
+                <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-1 rounded border">Total: {users.length}</span>
+            </div>
             <table className="w-full text-sm text-left">
               <thead className="bg-gray-100 text-gray-500 uppercase font-bold">
                 <tr><th className="p-4">Nombre</th><th className="p-4">Contraseña</th><th className="p-4">Estado</th><th className="p-4">Acción</th></tr>
@@ -497,11 +522,11 @@ const AdminDashboard = ({ user }) => {
               <tbody>
                 {users.map(u => (
                   <tr key={u.id} className="border-b hover:bg-gray-50">
-                    <td className="p-4 font-bold text-indigo-900">{u.name} {u.role==='admin' && <span className="bg-indigo-100 text-indigo-700 text-xs px-1 rounded ml-2">ADMIN</span>}</td>
+                    <td className="p-4 font-bold text-indigo-900 uppercase">{u.name} {u.role==='admin' && <span className="bg-indigo-100 text-indigo-700 text-xs px-1 rounded ml-2">ADMIN</span>}</td>
                     <td className="p-4 font-mono text-gray-600 bg-gray-50 rounded px-2 select-all">{u.password || '****'}</td>
                     <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold ${u.status==='active'?'bg-green-100 text-green-800':'bg-yellow-100 text-yellow-800'}`}>{u.status}</span></td>
                     <td className="p-4 flex gap-2">
-                      {u.status === 'pending' && <button onClick={()=>approveUser(u.id)} className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">Aceptar</button>}
+                      {u.status === 'pending' && <button onClick={()=>approveUser(u.id)} className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 shadow text-xs">Aceptar</button>}
                       <button onClick={()=>deleteUser(u.id)} className="text-red-500 hover:bg-red-50 px-2 py-1 rounded"><Trash2 size={16}/></button>
                     </td>
                   </tr>
@@ -537,18 +562,18 @@ const AdminDashboard = ({ user }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {weeklyData.rows.length === 0 && <tr><td colSpan="8" className="p-4 text-gray-400">No hay empleados registrados.</td></tr>}
+                  {weeklyData.rows.length === 0 && <tr><td colSpan="8" className="p-8 text-gray-400 text-center">No hay empleados registrados.</td></tr>}
                   {weeklyData.rows.map((row, i) => (
                     <tr key={i} className="border-b hover:bg-gray-50">
-                      <td className="p-3 text-left font-bold sticky left-0 bg-white border-r text-indigo-900">{row.user.name}</td>
+                      <td className="p-3 text-left font-bold sticky left-0 bg-white border-r text-indigo-900 uppercase">{row.user.name}</td>
                       {row.daysData.map((data, j) => (
                         <td key={j} className="p-1 border-l">
                           {data ? (
                             <div className="flex flex-col gap-1 text-[10px]">
-                              <span className="bg-green-100 text-green-800 px-1 rounded">{data.in}</span>
-                              <span className="bg-red-100 text-red-800 px-1 rounded">{data.out}</span>
+                              <span className="bg-green-100 text-green-800 px-1 rounded font-bold">{data.in}</span>
+                              <span className="bg-red-100 text-red-800 px-1 rounded font-bold">{data.out}</span>
                             </div>
-                          ) : <span className="text-gray-200">-</span>}
+                          ) : <span className="text-gray-200 text-lg">-</span>}
                         </td>
                       ))}
                     </tr>
@@ -571,7 +596,7 @@ export default function App() {
 
   // Escuchar estado de autenticación
   useEffect(() => {
-    // Protección: si auth no existe (local sin descomentar), no hacer nada para evitar crash
+    // Si auth no está definido (no se han descomentado imports), no hacer nada
     if(!auth) return;
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -589,6 +614,9 @@ export default function App() {
     const unsub = onSnapshot(doc(db, COLLECTION_USERS, user.uid), (docSnap) => {
       if (docSnap.exists()) setUserData({ ...docSnap.data(), uid: user.uid });
       else setUserData(null);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error al leer perfil:", error);
       setLoading(false);
     });
     return () => unsub();
