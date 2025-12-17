@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 //  🔴 INSTRUCCIONES OBLIGATORIAS PARA TU PC (VS CODE)
 // =============================================================================
 // 1. BORRA las dos barras '//' de las siguientes 2 líneas para que funcione:
-/import logoImg from './logo.png'; 
+import logoImg from './logo.png'; 
 import { auth, db } from './firebaseConfig';
 
 // 2. Una vez descomentadas las de arriba, BORRA el bloque "CÓDIGO TEMPORAL" de abajo.
