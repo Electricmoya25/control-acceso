@@ -47,3 +47,8 @@ Estos pasos te ayudan a que los cambios de la aplicación de control de acceso l
 - Haz commits pequeños y descriptivos para facilitar la revisión.
 - Si añades dependencias nuevas, incluye la razón en la descripción del PR.
 - Para cambios de UI, agrega capturas de pantalla en el PR para que los revisores vean el impacto visual.
+- Para despliegues en Cloud Run usa el script `gcp-build` (se ejecuta automáticamente en los buildpacks de Google) para
+  generar `dist` antes de iniciar el contenedor.
+- `npm start` sirve la app ya compilada en `PORT` (por defecto 8080) con `--strictPort`, así que la revisión de salud de
+  Cloud Run siempre encontrará el servicio escuchando en el puerto esperado.
+
