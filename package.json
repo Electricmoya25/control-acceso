@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gcp-build": "npm run build",
+    "start": "node server.js"
   },
   "dependencies": {
     "firebase": "^12.6.0",
