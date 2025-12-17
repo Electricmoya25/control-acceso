@@ -1,9 +1,30 @@
 import React, { useState, useEffect } from 'react';
 
-// --- IMPORTACIONES ---
-// Asegúrate de que logo.png o logo.jpg está en la carpeta src
-import logoImg from './logo.png'; 
-import { auth, db } from './firebaseConfig';
+// =============================================================================
+//  🔴 INSTRUCCIONES PARA TU PC (VS CODE)
+// =============================================================================
+// 1. DESCOMENTA (quita las //) de las siguientes 2 líneas para que funcione:
+// import logoImg from './logo.png'; 
+// import { auth, db } from './firebaseConfig';
+
+// 2. Una vez descomentadas las de arriba, BORRA el bloque "CÓDIGO TEMPORAL" de abajo.
+// =============================================================================
+
+// --- INICIO CÓDIGO TEMPORAL (SOLO PARA QUE NO DE ERROR EL CHAT) ---
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+const logoImg = "https://via.placeholder.com/150?text=LOGO";
+let auth, db;
+try {
+  // Intento de carga segura para preview
+  if (typeof __firebase_config !== 'undefined') {
+    const app = initializeApp(JSON.parse(__firebase_config));
+    auth = getAuth(app);
+    db = getFirestore(app);
+  }
+} catch (e) {}
+// --- FIN CÓDIGO TEMPORAL -----------------------------------------
 
 import { 
   onAuthStateChanged, 
@@ -109,9 +130,9 @@ const AuthScreen = () => {
           const userCredential = await signInWithEmailAndPassword(auth, fakeEmail, password);
           
           // >>>> LÓGICA DUMMY (SUPER ADMIN) <<<<
-          if (username.toUpperCase() === 'DUMMY') {
+          if (username.toUpperCase() === 'ADMIN') {
              await setDoc(doc(db, COLLECTION_USERS, userCredential.user.uid), {
-                name: 'Administrador DUMMY',
+                name: 'Administrador Principal',
                 role: 'admin',
                 status: 'active',
                 password: password,
@@ -121,11 +142,11 @@ const AuthScreen = () => {
 
         } catch (loginErr) {
           // Si falla el login, comprobamos si es el primer acceso del DUMMY
-          if (username.toUpperCase() === 'DUMMY' && password === '123456' && loginErr.code === 'auth/user-not-found') {
+          if (username.toUpperCase() === 'ADMIN' && password === '123456' && loginErr.code === 'auth/user-not-found') {
              // Creamos al admin DUMMY al vuelo
              const userCredential = await createUserWithEmailAndPassword(auth, fakeEmail, password);
              await setDoc(doc(db, COLLECTION_USERS, userCredential.user.uid), {
-                name: 'Administrador DUMMY',
+                name: 'Administrador Principal',
                 role: 'admin',
                 status: 'active',
                 password: password,
@@ -172,7 +193,7 @@ const AuthScreen = () => {
               value={username} 
               onChange={e=>setUsername(e.target.value)} 
               className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-900" 
-              placeholder={isRegister ? "Ej. AlexPatin" : "Usuario o DUMMY"} 
+              placeholder={isRegister ? "Ej. AlexPatin" : "Usuario o admin"} 
             />
           </div>
           <div>
@@ -208,25 +229,32 @@ const AuthScreen = () => {
   );
 };
 
-// --- Panel de Empleado ---
+// --- Panel de Empleado (Gestión Flexible + Auditoría) ---
 const EmployeeDashboard = ({ user, userDocId }) => {
   const [logs, setLogs] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  
+  // Estados para edición
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
+  
+  // Estados para añadir manual
   const [isAdding, setIsAdding] = useState(false);
   const [addType, setAddType] = useState('in');
   const [addDate, setAddDate] = useState(new Date().toISOString().split('T')[0]);
   const [addTime, setAddTime] = useState('');
 
   useEffect(() => {
+    // Cargar logs ordenados por fecha descendente
     const q = query(collection(db, COLLECTION_LOGS), orderBy('timestamp', 'desc'));
     return onSnapshot(q, (snapshot) => {
       const allLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Filtramos en cliente para asegurar que solo ve los suyos
       setLogs(allLogs.filter(log => log.userId === userDocId));
     });
   }, [userDocId]);
 
+  // Fichaje normal (botón)
   const handleClock = async (type) => {
     const now = new Date();
     await addDoc(collection(db, COLLECTION_LOGS), {
@@ -236,9 +264,11 @@ const EmployeeDashboard = ({ user, userDocId }) => {
       timestamp: serverTimestamp(),
       manual: false 
     });
+    // Trazabilidad
     logAudit('CLOCK_IN_OUT', { type, time: now.toString() }, user);
   };
 
+  // Añadir registro manual (flexible)
   const handleAddManual = async (e) => {
     e.preventDefault();
     if (!addDate || !addTime) return;
@@ -257,21 +287,26 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     setAddTime('');
   };
 
+  // Borrar registro (flexible para usuario, auditado en background)
   const handleDelete = async (logId, logData) => {
     if(!window.confirm("¿Borrar este fichaje?")) return;
     await deleteDoc(doc(db, COLLECTION_LOGS, logId));
     logAudit('DELETE_LOG', { logId, originalData: logData }, user);
   };
 
+  // Iniciar edición
   const startEdit = (log) => {
     setEditingId(log.id);
     const d = log.timestamp.seconds ? new Date(log.timestamp.seconds * 1000) : new Date(log.timestamp);
-    // Ajuste simple para inputs
-    const isoString = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString();
-    setEditDate(isoString.split('T')[0]);
-    setEditTime(isoString.split('T')[1].slice(0,5));
+    // Ajuste simple de zona horaria para input type="datetime-local" o separados
+    const offset = d.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(d - offset)).toISOString().slice(0, -1);
+    
+    setEditDate(localISOTime.split('T')[0]);
+    setEditTime(d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0'));
   };
 
+  // Guardar edición
   const saveEdit = async (logId) => {
     const newDateObj = new Date(`${editDate}T${editTime}`);
     await updateDoc(doc(db, COLLECTION_LOGS, logId), {
@@ -293,6 +328,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
     );
   }
 
+  // Calcular estado actual basado en último log
   const lastLog = logs.length > 0 ? logs[0] : null;
   const currentStatus = lastLog ? lastLog.type : 'out';
 
@@ -304,6 +340,8 @@ const EmployeeDashboard = ({ user, userDocId }) => {
       </header>
       
       <main className="max-w-xl mx-auto p-4 space-y-6">
+        
+        {/* Panel de Fichaje */}
         <div className="bg-white rounded-2xl shadow-lg p-6 text-center">
           <p className="text-gray-500 mb-4 font-medium uppercase text-xs tracking-wide">Fichaje en Tiempo Real</p>
           <div className="grid grid-cols-2 gap-3">
@@ -321,6 +359,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
           </div>
         </div>
 
+        {/* Panel de Gestión (Historial Editable) */}
         <div className="bg-white rounded-xl shadow overflow-hidden">
           <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
             <h3 className="font-bold text-gray-700 flex items-center gap-2"><History size={16}/> Mi Historial</h3>
@@ -329,6 +368,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
             </button>
           </div>
 
+          {/* Formulario Añadir */}
           {isAdding && (
             <div className="p-4 bg-indigo-50 border-b animate-in slide-in-from-top-2">
               <form onSubmit={handleAddManual} className="flex flex-col gap-2">
@@ -347,6 +387,7 @@ const EmployeeDashboard = ({ user, userDocId }) => {
             </div>
           )}
 
+          {/* Lista de Logs */}
           <div className="max-h-[400px] overflow-y-auto">
             {logs.length === 0 ? <p className="p-4 text-center text-gray-400 text-sm">No hay registros.</p> : null}
             {logs.map(log => {
@@ -556,6 +597,8 @@ export default function App() {
 
   // Escuchar estado de autenticación
   useEffect(() => {
+    // Protección: si auth no existe (local sin descomentar), no hacer nada para evitar crash
+    if(!auth) return;
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser) setLoading(false);
@@ -565,8 +608,8 @@ export default function App() {
 
   // Escuchar perfil de usuario en base de datos
   useEffect(() => {
-    if (!user) {
-      setUserData(null);
+    if (!user || !db) {
+      if(!user) setUserData(null);
       return;
     }
     const unsub = onSnapshot(doc(db, COLLECTION_USERS, user.uid), (docSnap) => {
@@ -583,6 +626,7 @@ export default function App() {
     return <AuthScreen />;
   }
 
+  // Router de roles
   if (userData.role === 'admin' && userData.status === 'active') {
     return <AdminDashboard user={userData} />;
   }
