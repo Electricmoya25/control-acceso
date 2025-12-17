@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 //  🔴 INSTRUCCIONES PARA TU PC (VS CODE)
 // =============================================================================
 // 1. Asegúrate de que estas líneas estén activas (sin //) en tu VS Code:
-// import logoImg from './logo.png'; 
-// import { auth, db } from './firebaseConfig';
+import logoImg from './logo.png'; 
+import { auth, db } from './firebaseConfig';
 
 // --- BLOQUE DE COMPATIBILIDAD ---
 import { initializeApp } from 'firebase/app';
