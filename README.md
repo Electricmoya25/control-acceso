@@ -47,6 +47,43 @@ Estos pasos te ayudan a que los cambios de la aplicación de control de acceso l
 - Haz commits pequeños y descriptivos para facilitar la revisión.
 - Si añades dependencias nuevas, incluye la razón en la descripción del PR.
 - Para cambios de UI, agrega capturas de pantalla en el PR para que los revisores vean el impacto visual.
+
+## Ejecución y despliegue
+
+- La aplicación se sirve desde el artefacto compilado (`dist`) mediante `node server.js`. El script `npm run start` espera que el build ya exista; en plataformas como Cloud Run el paso `gcp-build` ejecuta automáticamente `npm run build` para generar `dist`.
+- El directorio `dist/` está excluido del repositorio para evitar conflictos de merges; genera el build localmente cuando necesites probar el arranque real.
+
+2. **Verifica que todo compile** antes de subir los cambios:
+
+   ```bash
+   npm run build
+   ```
+
+3. **Prepara y revisa el commit**:
+
+   ```bash
+   git status
+   git add .
+   git commit -m "Describe brevemente el cambio"
+   ```
+
+   Usa `git status` para confirmar que solo se incluyen los archivos deseados.
+
+4. **Envía la rama a GitHub**:
+
+   ```bash
+   git push origin <nombre-de-tu-rama>
+   ```
+
+5. **Crea un Pull Request** en GitHub desde esa rama hacia la rama principal (por ejemplo, `main` o `work`). Incluye un resumen del cambio y evidencia de pruebas (`npm run build`).
+
+6. **Espera la revisión y haz merge** cuando el PR esté aprobado. Si usas despliegue automático, verifica que el pipeline (CI/CD) se ejecute sin errores tras el merge.
+
+## Consejos
+
+- Haz commits pequeños y descriptivos para facilitar la revisión.
+- Si añades dependencias nuevas, incluye la razón en la descripción del PR.
+- Para cambios de UI, agrega capturas de pantalla en el PR para que los revisores vean el impacto visual.
 - El comando `npm start` ejecuta automáticamente `npm run build` antes de servir la previsualización, evitando errores de
   arranque en despliegues como Cloud Run o Firebase Hosting.
 - `npm start` sirve la app en `PORT` (por defecto 8080) con `--strictPort`, así que la revisión de salud de Cloud Run
